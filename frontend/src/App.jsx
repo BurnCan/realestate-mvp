@@ -25,7 +25,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
 
-  const fetchDeals = () => {
+  const fetchDeals = ({ distressedOnly = false, allResults = false } = {}) => {
     setLoading(true);
 
     axios
@@ -33,7 +33,9 @@ export default function App() {
         params: {
           muni: muni || undefined,
           min_score: minScore || 0,
-          limit: 50,
+          distressed_only: distressedOnly || undefined,
+          all_results: allResults || undefined,
+          limit: allResults ? undefined : 50,
         },
       })
       .then((res) => {
@@ -46,7 +48,9 @@ export default function App() {
 
   const searchDeals = (q) => {
     const query = (q || "").trim();
-    if (!query) return fetchDeals();
+    if (!query) {
+      return fetchDeals({ distressedOnly: showDistressedOnly });
+    }
 
     setLoading(true);
 
@@ -55,7 +59,8 @@ export default function App() {
         params: { q: query },
       })
       .then((res) => {
-        setDeals(res.data.results || []);
+        const results = res.data.results || [];
+        setDeals(showDistressedOnly ? results.filter(isDistressedProperty) : results);
       })
       .finally(() => {
         setLoading(false);
@@ -66,9 +71,20 @@ export default function App() {
     fetchDeals();
   }, []);
 
-  const visibleDeals = showDistressedOnly
-    ? deals.filter(isDistressedProperty)
-    : deals;
+  const applyFilters = () => {
+    fetchDeals({ distressedOnly: showDistressedOnly });
+  };
+
+  const toggleDistressedView = () => {
+    const nextValue = !showDistressedOnly;
+    setShowDistressedOnly(nextValue);
+    fetchDeals({ distressedOnly: nextValue });
+  };
+
+  const loadAllDistressed = () => {
+    setShowDistressedOnly(true);
+    fetchDeals({ distressedOnly: true, allResults: true });
+  };
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
@@ -96,10 +112,11 @@ export default function App() {
           onChange={(e) => setMinScore(Number(e.target.value))}
         />
 
-        <button onClick={fetchDeals}>Apply Filters</button>
-        <button onClick={() => setShowDistressedOnly((prev) => !prev)}>
-          {showDistressedOnly ? "Show All Properties" : "Show Distressed Only"}
+        <button onClick={applyFilters}>Apply Filters</button>
+        <button onClick={toggleDistressedView}>
+          {showDistressedOnly ? "Show Top 50 Properties" : "Show Top 50 Distressed"}
         </button>
+        <button onClick={loadAllDistressed}>Show All Distressed (All Pages)</button>
       </div>
 
       {loading && <p>Loading deals...</p>}
@@ -121,7 +138,7 @@ export default function App() {
         </thead>
 
         <tbody>
-          {visibleDeals.map((d) => {
+          {deals.map((d) => {
             const score = d.deal_score ?? 0;
             const totalAssessedValue =
               d.total_assessed_value ?? d.assessed_value ?? null;
