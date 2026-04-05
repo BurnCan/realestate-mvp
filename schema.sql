@@ -1,62 +1,25 @@
-<<<<<<< HEAD
-
- CREATE TABLE properties (
-     id SERIAL PRIMARY KEY,
-     parcel_id TEXT UNIQUE,
-     address TEXT,
-     muni TEXT,
-     neighborhood TEXT,
-
-     assessed_value BIGINT,
-     total_assessed_value BIGINT,
-     owners_name_1 TEXT,
-     owners_name_2 TEXT,
-     land_value BIGINT,
-     building_value BIGINT,
-
-     sale_price BIGINT,
-     sale_date TIMESTAMP,
-     sale_type TEXT,
-     sale_validity_code TEXT,
-
-     sqft_living_area NUMERIC,
-     bedrooms NUMERIC,
-     bathrooms NUMERIC,
-     half_baths NUMERIC,
-     stories NUMERIC,
-     year_built INT,
-
-     deal_score NUMERIC,
-     updated_at TIMESTAMP DEFAULT NOW()
- );
-=======
 CREATE TABLE properties (
     id SERIAL PRIMARY KEY,
     parcel_id TEXT UNIQUE,
     address TEXT,
     muni TEXT,
     neighborhood TEXT,
-
     assessed_value BIGINT,
     total_assessed_value BIGINT,
     owners_name_1 TEXT,
     owners_name_2 TEXT,
     land_value BIGINT,
     building_value BIGINT,
-
     sale_price BIGINT,
     sale_date TIMESTAMP,
     sale_type TEXT,
     sale_validity_code TEXT,
-
     sqft_living_area NUMERIC,
     bedrooms NUMERIC,
     bathrooms NUMERIC,
     half_baths NUMERIC,
     stories NUMERIC,
     year_built INT,
-
     deal_score NUMERIC,
     updated_at TIMESTAMP DEFAULT NOW()
 );
->>>>>>> refs/remotes/origin/dev
