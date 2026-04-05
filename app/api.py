@@ -15,7 +15,13 @@ app.add_middleware(
 
 
 @app.get("/deals")
-def get_deals(muni: str | None = None, min_score: float = 0, limit: int = 50):
+def get_deals(
+    muni: str | None = None,
+    min_score: float = 0,
+    limit: int = 50,
+    distressed_only: bool = False,
+    all_results: bool = False,
+):
     conn = get_conn()
     ensure_properties_schema(conn)
     cur = conn.cursor()
@@ -46,8 +52,23 @@ def get_deals(muni: str | None = None, min_score: float = 0, limit: int = 50):
         query += " AND deal_score >= %s"
         params.append(min_score)
 
-    query += " ORDER BY deal_score DESC LIMIT %s"
-    params.append(limit)
+    if distressed_only:
+        query += """
+            AND (
+                LOWER(COALESCE(owners_name_1, '')) LIKE '%llc%'
+                OR LOWER(COALESCE(owners_name_1, '')) LIKE '%secretary%'
+                OR LOWER(COALESCE(owners_name_1, '')) LIKE '%bank%'
+                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%llc%'
+                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%secretary%'
+                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%bank%'
+            )
+        """
+
+    query += " ORDER BY deal_score DESC"
+
+    if not all_results:
+        query += " LIMIT %s"
+        params.append(limit)
 
     cur.execute(query, params)
     rows = cur.fetchall()
