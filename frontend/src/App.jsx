@@ -75,7 +75,6 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
-  const [currentPage, setCurrentPage] = useState("dashboard");
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -153,24 +152,6 @@ export default function App() {
     fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: 1 });
   };
 
-  const toggleDistressedView = () => {
-    const nextValue = !showDistressedOnly;
-    setShowDistressedOnly(nextValue);
-    fetchDeals({ distressedOnly: nextValue, pageNumber: 1 });
-  };
-
-  const goToDistressedPage = () => {
-    setCurrentPage("distressed");
-    setShowDistressedOnly(true);
-    fetchDeals({ distressedOnly: true, pageNumber: 1 });
-  };
-
-  const goToDashboardPage = () => {
-    setCurrentPage("dashboard");
-    setShowDistressedOnly(false);
-    fetchDeals({ distressedOnly: false, pageNumber: 1 });
-  };
-
   const goToNextPage = () => {
     if (isSearchMode || page >= pagination.total_pages) return;
     fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: page + 1 });
@@ -183,87 +164,61 @@ export default function App() {
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
-      {currentPage === "dashboard" ? (
-        <>
-          <h1>🏡 Real Estate Results Dashboard</h1>
+      <h1>🏡 Real Estate Results Dashboard</h1>
 
-          <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-            <input
-              placeholder="Search address..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
-            />
-            <button onClick={() => searchDeals(search)}>Search</button>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
+        <input
+          placeholder="Search address..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
+        />
+        <button onClick={() => searchDeals(search)}>Search</button>
 
-            <input
-              placeholder="Filter municipality"
-              value={muni}
-              onChange={(e) => setMuni(e.target.value)}
-            />
+        <input
+          placeholder="Filter municipality"
+          value={muni}
+          onChange={(e) => setMuni(e.target.value)}
+        />
 
-            <input
-              type="number"
-              placeholder="Min Score"
-              value={minScore}
-              onChange={(e) => setMinScore(Number(e.target.value))}
-            />
+        <input
+          type="number"
+          placeholder="Min Score"
+          value={minScore}
+          onChange={(e) => setMinScore(Number(e.target.value))}
+        />
 
-            <button onClick={applyFilters}>Apply Filters</button>
-            <button onClick={toggleDistressedView}>
-              {showDistressedOnly
-                ? "Show All Results"
-                : "Show Distressed Results"}
-            </button>
-            <button onClick={goToDistressedPage}>View All Distressed Properties</button>
-          </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={showDistressedOnly}
+            onChange={(e) => setShowDistressedOnly(e.target.checked)}
+          />
+          Distressed properties only
+        </label>
 
-          {loading && <p>Loading results...</p>}
-          <p>
-            Showing page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
-            {pagination.total.toLocaleString()} total results)
-          </p>
-          {!isSearchMode && (
-            <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-              <button onClick={goToPreviousPage} disabled={page <= 1}>
-                ← Previous
-              </button>
-              <button
-                onClick={goToNextPage}
-                disabled={page >= pagination.total_pages}
-              >
-                Next →
-              </button>
-            </div>
-          )}
-          <DealsTable deals={deals} />
-        </>
-      ) : (
-        <>
-          <h1>🔥 Distressed Properties</h1>
-          <div style={{ marginBottom: 20 }}>
-            <button onClick={goToDashboardPage}>← Back to Deal Dashboard</button>
-          </div>
+        <button onClick={applyFilters}>Apply Filters</button>
+      </div>
 
-          {loading && <p>Loading distressed properties...</p>}
-          <p>
-            Showing page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
-            {pagination.total.toLocaleString()} total distressed results)
-          </p>
-          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-            <button onClick={goToPreviousPage} disabled={page <= 1}>
-              ← Previous
-            </button>
-            <button
-              onClick={goToNextPage}
-              disabled={page >= pagination.total_pages}
-            >
-              Next →
-            </button>
-          </div>
-          <DealsTable deals={deals} />
-        </>
+      {loading && <p>Loading results...</p>}
+      <p>
+        Showing page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
+        {pagination.total.toLocaleString()} total results)
+      </p>
+      {!isSearchMode && (
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <button onClick={goToPreviousPage} disabled={page <= 1}>
+            ← Previous
+          </button>
+          <button
+            onClick={goToNextPage}
+            disabled={page >= pagination.total_pages}
+          >
+            Next →
+          </button>
+        </div>
       )}
+      <DealsTable deals={deals} />
     </div>
   );
 }
