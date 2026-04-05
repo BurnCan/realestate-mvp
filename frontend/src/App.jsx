@@ -76,9 +76,18 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    total_pages: 1,
+  });
+  const [isSearchMode, setIsSearchMode] = useState(false);
 
-  const fetchDeals = ({ distressedOnly = false, allResults = false } = {}) => {
+  const fetchDeals = ({ distressedOnly = false, pageNumber = 1 } = {}) => {
     setLoading(true);
+    setIsSearchMode(false);
 
     axios
       .get(`${API}/deals`, {
@@ -86,13 +95,21 @@ export default function App() {
           muni: muni || undefined,
           min_score: minScore || 0,
           distressed_only: distressedOnly || undefined,
-          all_results: allResults || undefined,
-          limit: allResults ? undefined : 50,
+          limit: 50,
+          page: pageNumber,
         },
       })
       .then((res) => {
         const results = res.data.results || [];
+        const nextPagination = res.data.pagination || {
+          page: pageNumber,
+          limit: 50,
+          total: results.length,
+          total_pages: 1,
+        };
         setDeals(distressedOnly ? results.filter(isDistressedProperty) : results);
+        setPagination(nextPagination);
+        setPage(nextPagination.page);
       })
       .finally(() => {
         setLoading(false);
@@ -102,18 +119,26 @@ export default function App() {
   const searchDeals = (q) => {
     const query = (q || "").trim();
     if (!query) {
-      return fetchDeals({ distressedOnly: showDistressedOnly });
+      return fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: 1 });
     }
 
     setLoading(true);
+    setIsSearchMode(true);
 
     axios
       .get(`${API}/search`, {
-        params: { q: query },
+        params: { q: query, limit: 50 },
       })
       .then((res) => {
         const results = res.data.results || [];
         setDeals(showDistressedOnly ? results.filter(isDistressedProperty) : results);
+        setPagination({
+          page: 1,
+          limit: 50,
+          total: results.length,
+          total_pages: 1,
+        });
+        setPage(1);
       })
       .finally(() => {
         setLoading(false);
@@ -125,32 +150,42 @@ export default function App() {
   }, []);
 
   const applyFilters = () => {
-    fetchDeals({ distressedOnly: showDistressedOnly });
+    fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: 1 });
   };
 
   const toggleDistressedView = () => {
     const nextValue = !showDistressedOnly;
     setShowDistressedOnly(nextValue);
-    fetchDeals({ distressedOnly: nextValue });
+    fetchDeals({ distressedOnly: nextValue, pageNumber: 1 });
   };
 
   const goToDistressedPage = () => {
     setCurrentPage("distressed");
     setShowDistressedOnly(true);
-    fetchDeals({ distressedOnly: true, allResults: true });
+    fetchDeals({ distressedOnly: true, pageNumber: 1 });
   };
 
   const goToDashboardPage = () => {
     setCurrentPage("dashboard");
     setShowDistressedOnly(false);
-    fetchDeals({ distressedOnly: false, allResults: false });
+    fetchDeals({ distressedOnly: false, pageNumber: 1 });
+  };
+
+  const goToNextPage = () => {
+    if (isSearchMode || page >= pagination.total_pages) return;
+    fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: page + 1 });
+  };
+
+  const goToPreviousPage = () => {
+    if (isSearchMode || page <= 1) return;
+    fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: page - 1 });
   };
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       {currentPage === "dashboard" ? (
         <>
-          <h1>🏡 Real Estate Deal Dashboard</h1>
+          <h1>🏡 Real Estate Results Dashboard</h1>
 
           <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
             <input
@@ -177,13 +212,30 @@ export default function App() {
             <button onClick={applyFilters}>Apply Filters</button>
             <button onClick={toggleDistressedView}>
               {showDistressedOnly
-                ? "Show Top 50 Properties"
-                : "Show Top 50 Distressed"}
+                ? "Show All Results"
+                : "Show Distressed Results"}
             </button>
             <button onClick={goToDistressedPage}>View All Distressed Properties</button>
           </div>
 
-          {loading && <p>Loading deals...</p>}
+          {loading && <p>Loading results...</p>}
+          <p>
+            Showing page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
+            {pagination.total.toLocaleString()} total results)
+          </p>
+          {!isSearchMode && (
+            <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <button onClick={goToPreviousPage} disabled={page <= 1}>
+                ← Previous
+              </button>
+              <button
+                onClick={goToNextPage}
+                disabled={page >= pagination.total_pages}
+              >
+                Next →
+              </button>
+            </div>
+          )}
           <DealsTable deals={deals} />
         </>
       ) : (
@@ -194,6 +246,21 @@ export default function App() {
           </div>
 
           {loading && <p>Loading distressed properties...</p>}
+          <p>
+            Showing page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
+            {pagination.total.toLocaleString()} total distressed results)
+          </p>
+          <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+            <button onClick={goToPreviousPage} disabled={page <= 1}>
+              ← Previous
+            </button>
+            <button
+              onClick={goToNextPage}
+              disabled={page >= pagination.total_pages}
+            >
+              Next →
+            </button>
+          </div>
           <DealsTable deals={deals} />
         </>
       )}
