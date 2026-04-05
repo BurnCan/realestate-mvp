@@ -3,12 +3,27 @@ import axios from "axios";
 
 const API = "http://127.0.0.1:8000";
 
+const isDistressedProperty = (deal) => {
+  const owner1 = (deal.owners_name_1 || "").toLowerCase();
+  const owner2 = (deal.owners_name_2 || "").toLowerCase();
+
+  return (
+    owner1.includes("llc") ||
+    owner1.includes("secretary") ||
+    owner1.includes("bank") ||
+    owner2.includes("llc") ||
+    owner2.includes("secretary") ||
+    owner2.includes("bank")
+  );
+};
+
 export default function App() {
   const [deals, setDeals] = useState([]);
   const [muni, setMuni] = useState("");
   const [minScore, setMinScore] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showDistressedOnly, setShowDistressedOnly] = useState(false);
 
   const fetchDeals = () => {
     setLoading(true);
@@ -51,6 +66,10 @@ export default function App() {
     fetchDeals();
   }, []);
 
+  const visibleDeals = showDistressedOnly
+    ? deals.filter(isDistressedProperty)
+    : deals;
+
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>🏡 Real Estate Deal Dashboard</h1>
@@ -78,6 +97,9 @@ export default function App() {
         />
 
         <button onClick={fetchDeals}>Apply Filters</button>
+        <button onClick={() => setShowDistressedOnly((prev) => !prev)}>
+          {showDistressedOnly ? "Show All Properties" : "Show Distressed Only"}
+        </button>
       </div>
 
       {loading && <p>Loading deals...</p>}
@@ -99,20 +121,12 @@ export default function App() {
         </thead>
 
         <tbody>
-          {deals.map((d) => {
-            const owner1 = (d.owners_name_1 || "").toLowerCase();
-            const owner2 = (d.owners_name_2 || "").toLowerCase();
+          {visibleDeals.map((d) => {
             const score = d.deal_score ?? 0;
             const totalAssessedValue =
               d.total_assessed_value ?? d.assessed_value ?? null;
 
-            const isDistressed =
-              owner1.includes("llc") ||
-              owner1.includes("secretary") ||
-              owner1.includes("bank") ||
-              owner2.includes("llc") ||
-              owner2.includes("secretary") ||
-              owner2.includes("bank");
+            const isDistressed = isDistressedProperty(d);
 
             return (
               <tr
