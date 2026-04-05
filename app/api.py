@@ -1,14 +1,24 @@
-from fastapi import FastAPI, Query
-from db import get_conn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .db import get_conn
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/deals")
 def get_deals(
     muni: str = None,
     min_score: float = 0,
-    limit: int = 50
+    limit: int = 50,
 ):
     conn = get_conn()
     cur = conn.cursor()
@@ -25,7 +35,7 @@ def get_deals(
         query += " AND muni = %s"
         params.append(muni)
 
-    if min_score:
+    if min_score is not None:
         query += " AND deal_score >= %s"
         params.append(min_score)
 
