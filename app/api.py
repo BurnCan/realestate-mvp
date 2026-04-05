@@ -55,12 +55,12 @@ def get_deals(
     if distressed_only:
         base_query += """
             AND (
-                LOWER(COALESCE(owners_name_1, '')) LIKE '%llc%'
-                OR LOWER(COALESCE(owners_name_1, '')) LIKE '%secretary%'
-                OR LOWER(COALESCE(owners_name_1, '')) LIKE '%bank%'
-                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%llc%'
-                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%secretary%'
-                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%bank%'
+                LOWER(COALESCE(owners_name_1, '')) LIKE '%%llc%%'
+                OR LOWER(COALESCE(owners_name_1, '')) LIKE '%%secretary%%'
+                OR LOWER(COALESCE(owners_name_1, '')) LIKE '%%bank%%'
+                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%llc%%'
+                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%secretary%%'
+                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%bank%%'
             )
         """
 
