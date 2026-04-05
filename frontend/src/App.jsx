@@ -5,6 +5,58 @@ const API = "http://127.0.0.1:8000";
 
 const hasBankWord = (ownerName) => /\bbank\b/.test(ownerName);
 
+
+const MUNICIPALITIES = {
+  "01": "Allen Township",
+  "02": "Bangor Borough",
+  "03": "Bath Borough",
+  "04": "Bethlehem City",
+  "05": "Bethlehem Township",
+  "06": "Bushkill Township",
+  "07": "Chapman Borough",
+  "08": "East Allen Township",
+  "09": "East Bangor Borough",
+  "10": "Easton City",
+  "11": "Forks Township",
+  "12": "Freemansburgh Borough",
+  "13": "Glendon Borough",
+  "14": "Hanover Township",
+  "15": "Hellertown Borough",
+  "16": "Lehigh Township",
+  "17": "Lower Mount Bethel Township",
+  "18": "Lower Nazareth Township",
+  "19": "Lower Saucon Township",
+  "20": "Moore Township",
+  "21": "Nazareth Borough",
+  "22": "Northampton Borough",
+  "23": "North Catasaqua Borough",
+  "24": "Palmer Township",
+  "25": "Pen Argyl Borough",
+  "26": "Plainfield Township",
+  "27": "Portland Borough",
+  "28": "Roseto Borough",
+  "29": "Stockerton Borough",
+  "30": "Tatamy Borough",
+  "31": "Upper Mount Bethel Township",
+  "32": "Upper Nazareth Township",
+  "33": "Walnutport Borough",
+  "34": "Washington Township",
+  "35": "West Easton Borough",
+  "36": "Williams Township",
+  "37": "Wilson Borough",
+  "38": "Wind Gap Borough",
+};
+
+const formatMuni = (muniCode) => {
+  const raw = String(muniCode || "").trim();
+  if (!raw) return "—";
+
+  const normalized = /^\d+$/.test(raw) ? raw.padStart(2, "0") : raw;
+  const label = MUNICIPALITIES[normalized];
+
+  return label ? `${normalized} ${label}` : raw;
+};
+
 const isDistressedProperty = (deal) => {
   const owner1 = (deal.owners_name_1 || "").toLowerCase();
   const owner2 = (deal.owners_name_2 || "").toLowerCase();
@@ -50,7 +102,7 @@ const DealsTable = ({ deals }) => (
             <td>{d.owners_hidename || "—"}</td>
             <td>{d.owners_name_1 || "—"}</td>
             <td>{d.owners_name_2 || "—"}</td>
-            <td>{d.muni}</td>
+            <td>{formatMuni(d.muni)}</td>
             <td>
               {totalAssessedValue != null
                 ? `$${totalAssessedValue.toLocaleString()}`
@@ -175,11 +227,14 @@ export default function App() {
         />
         <button onClick={() => searchDeals(search)}>Search</button>
 
-        <input
-          placeholder="Filter municipality"
-          value={muni}
-          onChange={(e) => setMuni(e.target.value)}
-        />
+        <select value={muni} onChange={(e) => setMuni(e.target.value)}>
+          <option value="">All municipalities</option>
+          {Object.entries(MUNICIPALITIES).map(([code, name]) => (
+            <option key={code} value={code}>
+              {code} {name}
+            </option>
+          ))}
+        </select>
 
         <input
           type="number"
