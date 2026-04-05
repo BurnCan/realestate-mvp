@@ -27,7 +27,7 @@ def compute_score(p):
     # -------------------------
     owner_1 = (p["owners_name_1"] or "").lower()
     owner_2 = (p["owners_name_2"] or "").lower()
-    distress_terms = ("llc", "secretary", "bank")
+    distress_terms = ("secretary", "bank")
 
     distress_score = 0.0
 

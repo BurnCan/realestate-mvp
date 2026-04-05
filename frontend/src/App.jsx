@@ -8,10 +8,8 @@ const isDistressedProperty = (deal) => {
   const owner2 = (deal.owners_name_2 || "").toLowerCase();
 
   return (
-    owner1.includes("llc") ||
     owner1.includes("secretary") ||
     owner1.includes("bank") ||
-    owner2.includes("llc") ||
     owner2.includes("secretary") ||
     owner2.includes("bank")
   );
