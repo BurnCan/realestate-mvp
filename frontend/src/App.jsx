@@ -91,7 +91,8 @@ export default function App() {
         },
       })
       .then((res) => {
-        setDeals(res.data.results || []);
+        const results = res.data.results || [];
+        setDeals(distressedOnly ? results.filter(isDistressedProperty) : results);
       })
       .finally(() => {
         setLoading(false);
