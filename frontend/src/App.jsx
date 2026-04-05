@@ -17,6 +17,57 @@ const isDistressedProperty = (deal) => {
   );
 };
 
+const DealsTable = ({ deals }) => (
+  <table width="100%" border="1" cellPadding="8">
+    <thead>
+      <tr>
+        <th>Parcel ID</th>
+        <th>Address</th>
+        <th>Owner Hidden Name</th>
+        <th>Owner 1</th>
+        <th>Owner 2</th>
+        <th>Muni</th>
+        <th>Total Assessed Value</th>
+        <th>Deal Score</th>
+        <th>Sale Type</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {deals.map((d) => {
+        const score = d.deal_score ?? 0;
+        const totalAssessedValue = d.total_assessed_value ?? d.assessed_value ?? null;
+        const isDistressed = isDistressedProperty(d);
+
+        return (
+          <tr
+            key={d.parcel_id}
+            style={{ backgroundColor: isDistressed ? "#ffe6e6" : "white" }}
+          >
+            <td>{d.parcel_id}</td>
+            <td>{d.address}</td>
+            <td>{d.owners_hidename || "—"}</td>
+            <td>{d.owners_name_1 || "—"}</td>
+            <td>{d.owners_name_2 || "—"}</td>
+            <td>{d.muni}</td>
+            <td>
+              {totalAssessedValue != null
+                ? `$${totalAssessedValue.toLocaleString()}`
+                : "—"}
+            </td>
+            <td>
+              <b>{score.toFixed(2)}</b>
+            </td>
+            <td>{d.sale_type || "—"}</td>
+            <td>{isDistressed ? "🔥 Distressed" : "—"}</td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+);
+
 export default function App() {
   const [deals, setDeals] = useState([]);
   const [muni, setMuni] = useState("");
@@ -24,6 +75,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
+  const [currentPage, setCurrentPage] = useState("dashboard");
 
   const fetchDeals = ({ distressedOnly = false, allResults = false } = {}) => {
     setLoading(true);
@@ -81,96 +133,69 @@ export default function App() {
     fetchDeals({ distressedOnly: nextValue });
   };
 
-  const loadAllDistressed = () => {
+  const goToDistressedPage = () => {
+    setCurrentPage("distressed");
     setShowDistressedOnly(true);
     fetchDeals({ distressedOnly: true, allResults: true });
   };
 
+  const goToDashboardPage = () => {
+    setCurrentPage("dashboard");
+    setShowDistressedOnly(false);
+    fetchDeals({ distressedOnly: false, allResults: false });
+  };
+
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
-      <h1>🏡 Real Estate Deal Dashboard</h1>
+      {currentPage === "dashboard" ? (
+        <>
+          <h1>🏡 Real Estate Deal Dashboard</h1>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-        <input
-          placeholder="Search address..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
-        />
-        <button onClick={() => searchDeals(search)}>Search</button>
+          <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+            <input
+              placeholder="Search address..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
+            />
+            <button onClick={() => searchDeals(search)}>Search</button>
 
-        <input
-          placeholder="Filter municipality"
-          value={muni}
-          onChange={(e) => setMuni(e.target.value)}
-        />
+            <input
+              placeholder="Filter municipality"
+              value={muni}
+              onChange={(e) => setMuni(e.target.value)}
+            />
 
-        <input
-          type="number"
-          placeholder="Min Score"
-          value={minScore}
-          onChange={(e) => setMinScore(Number(e.target.value))}
-        />
+            <input
+              type="number"
+              placeholder="Min Score"
+              value={minScore}
+              onChange={(e) => setMinScore(Number(e.target.value))}
+            />
 
-        <button onClick={applyFilters}>Apply Filters</button>
-        <button onClick={toggleDistressedView}>
-          {showDistressedOnly ? "Show Top 50 Properties" : "Show Top 50 Distressed"}
-        </button>
-        <button onClick={loadAllDistressed}>Show All Distressed (All Pages)</button>
-      </div>
+            <button onClick={applyFilters}>Apply Filters</button>
+            <button onClick={toggleDistressedView}>
+              {showDistressedOnly
+                ? "Show Top 50 Properties"
+                : "Show Top 50 Distressed"}
+            </button>
+            <button onClick={goToDistressedPage}>View All Distressed Properties</button>
+          </div>
 
-      {loading && <p>Loading deals...</p>}
+          {loading && <p>Loading deals...</p>}
+          <DealsTable deals={deals} />
+        </>
+      ) : (
+        <>
+          <h1>🔥 Distressed Properties</h1>
+          <div style={{ marginBottom: 20 }}>
+            <button onClick={goToDashboardPage}>← Back to Deal Dashboard</button>
+          </div>
 
-      <table width="100%" border="1" cellPadding="8">
-        <thead>
-          <tr>
-            <th>Parcel ID</th>
-            <th>Address</th>
-            <th>Owner Hidden Name</th>
-            <th>Owner 1</th>
-            <th>Owner 2</th>
-            <th>Muni</th>
-            <th>Total Assessed Value</th>
-            <th>Deal Score</th>
-            <th>Sale Type</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {deals.map((d) => {
-            const score = d.deal_score ?? 0;
-            const totalAssessedValue =
-              d.total_assessed_value ?? d.assessed_value ?? null;
-
-            const isDistressed = isDistressedProperty(d);
-
-            return (
-              <tr
-                key={d.parcel_id}
-                style={{ backgroundColor: isDistressed ? "#ffe6e6" : "white" }}
-              >
-                <td>{d.parcel_id}</td>
-                <td>{d.address}</td>
-                <td>{d.owners_hidename || "—"}</td>
-                <td>{d.owners_name_1 || "—"}</td>
-                <td>{d.owners_name_2 || "—"}</td>
-                <td>{d.muni}</td>
-                <td>
-                  {totalAssessedValue != null
-                    ? `$${totalAssessedValue.toLocaleString()}`
-                    : "—"}
-                </td>
-                <td>
-                  <b>{score.toFixed(2)}</b>
-                </td>
-                <td>{d.sale_type || "—"}</td>
-                <td>{isDistressed ? "🔥 Distressed" : "—"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+          {loading && <p>Loading distressed properties...</p>}
+          <DealsTable deals={deals} />
+        </>
+      )}
     </div>
   );
 }
