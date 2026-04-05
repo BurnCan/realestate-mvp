@@ -1,22 +1,72 @@
 
+<<<<<<< HEAD
  from datetime import datetime
+=======
+
+def to_date(v):
+    if v is None:
+        return None
+
+    try:
+        # already string date
+        if isinstance(v, str):
+            return v
+
+        # convert to int safely
+        v = int(v)
+
+        # ignore obviously bad values
+        if v <= 0:
+            return None
+
+        # FIX: handle milliseconds vs seconds
+        if v > 10_000_000_000:  # looks like milliseconds
+            v = v / 1000
+
+        # clamp insane values (ArcGIS corruption guard)
+        if v > 4102444800:  # year 2100
+            return None
+
+        return datetime.utcfromtimestamp(v)
+
+    except Exception:
+        return None
+>>>>>>> refs/remotes/origin/dev
 
 
  def to_date(v):
      if v is None:
          return None
 
+<<<<<<< HEAD
      try:
          # already string date
          if isinstance(v, str):
              return v
+=======
+    total_assessed_value = a.get("TOTAL_ASSESSED_VALUE")
+
+    return {
+        "parcel_id": a.get("PARCEL_ID"),
+        "address": (a.get("LOCATION") or "").strip(),
+>>>>>>> refs/remotes/origin/dev
 
          # convert to int safely
          v = int(v)
 
+<<<<<<< HEAD
          # ignore obviously bad values
          if v <= 0:
              return None
+=======
+        # keep assessed_value for backward compatibility with scoring logic
+        "assessed_value": total_assessed_value,
+        "total_assessed_value": total_assessed_value,
+        "owners_name_1": a.get("OWNERS_NAME_1"),
+        "owners_name_2": a.get("OWNERS_NAME_2"),
+        "land_value": a.get("LAND_ASSESSMENT"),
+        "building_value": a.get("BUILDING_ASSESSMENT"),
+>>>>>>> refs/remotes/origin/dev
 
          # FIX: handle milliseconds vs seconds
          if v > 10_000_000_000:  # looks like milliseconds

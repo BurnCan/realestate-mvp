@@ -11,6 +11,7 @@ export default function App() {
    const [search, setSearch] = useState("");
    const [loading, setLoading] = useState(false);
 
+<<<<<<< HEAD
    // -------------------------
    // Fetch main deals feed
    // -------------------------
@@ -34,6 +35,23 @@ export default function App() {
 
 
    };
+=======
+    axios
+      .get(`${API}/deals`, {
+        params: {
+          muni: muni || undefined,
+          min_score: minScore || 0,
+          limit: 50,
+        },
+      })
+      .then((res) => {
+        setDeals(res.data.results || []);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+>>>>>>> refs/remotes/origin/dev
 
    // -------------------------
    // Search endpoint
@@ -44,6 +62,7 @@ export default function App() {
 
      setLoading(true);
 
+<<<<<<< HEAD
      axios
        .get(`${API}/search`, {
          params: { q: query },
@@ -81,6 +100,19 @@ export default function App() {
 
 
          />
+=======
+    axios
+      .get(`${API}/search`, {
+        params: { q: query },
+      })
+      .then((res) => {
+        setDeals(res.data.results || []);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+>>>>>>> refs/remotes/origin/dev
 
          <input
            type="number"
@@ -133,6 +165,7 @@ export default function App() {
                saleType.includes("lien") ||
                score >= 2.0; // matches log-based scoring better
 
+<<<<<<< HEAD
              return (
                <tr
                  key={d.parcel_id}
@@ -151,12 +184,58 @@ export default function App() {
                      ? `$${totalAssessedValue.toLocaleString()}`
                      : "—"}
                  </td>
+=======
+      {/* -------------------------
+          Table
+      -------------------------- */}
+      <table width="100%" border="1" cellPadding="8">
+        <thead>
+          <tr>
+            <th>Parcel ID</th>
+            <th>Address</th>
+            <th>Owner 1</th>
+            <th>Owner 2</th>
+            <th>Muni</th>
+            <th>Total Assessed Value</th>
+            <th>Deal Score</th>
+            <th>Sale Type</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {deals.map((d) => {
+            const saleType = (d.sale_type || "").toLowerCase();
+            const score = d.deal_score ?? 0;
+            const totalAssessedValue =
+              d.total_assessed_value ?? d.assessed_value ?? null;
+>>>>>>> refs/remotes/origin/dev
 
                  <td>
                    <b>{score.toFixed(2)}</b>
                  </td>
 
+<<<<<<< HEAD
                  <td>{d.sale_type || "—"}</td>
+=======
+            return (
+              <tr
+                key={d.parcel_id}
+                style={{
+                  backgroundColor: isDistressed ? "#ffe6e6" : "white",
+                }}
+              >
+                <td>{d.parcel_id}</td>
+                <td>{d.address}</td>
+                <td>{d.owners_name_1 || "—"}</td>
+                <td>{d.owners_name_2 || "—"}</td>
+                <td>{d.muni}</td>
+                <td>
+                  {totalAssessedValue != null
+                    ? `$${totalAssessedValue.toLocaleString()}`
+                    : "—"}
+                </td>
+>>>>>>> refs/remotes/origin/dev
 
                  <td>{isDistressed ? "🔥 Distressed" : "—"}</td>
                </tr>

@@ -2,7 +2,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> refs/remotes/origin/dev
 from .db import ensure_properties_schema, get_conn
 
 app = FastAPI()
@@ -18,6 +21,7 @@ app.add_middleware(
 
 @app.get("/deals")
 def get_deals(
+<<<<<<< HEAD
      muni: str | None = None,
      min_score: float = 0,
      limit: int = 50,
@@ -27,6 +31,30 @@ def get_deals(
      cur = conn.cursor()
 
      query = """
+=======
+    muni: str = None,
+    min_score: float = 0,
+    limit: int = 50,
+):
+    conn = get_conn()
+    ensure_properties_schema(conn)
+    cur = conn.cursor()
+
+    query = """
+        SELECT
+            parcel_id,
+            address,
+            muni,
+            assessed_value,
+            total_assessed_value,
+            owners_name_1,
+            owners_name_2,
+            deal_score,
+            sale_type
+        FROM properties
+        WHERE deal_score IS NOT NULL
+    """
+>>>>>>> refs/remotes/origin/dev
 
         SELECT
             parcel_id,
@@ -79,15 +107,63 @@ def get_deals(
          ]
      }
 
+<<<<<<< HEAD
+=======
+    return {
+        "results": [
+            {
+                "parcel_id": r[0],
+                "address": r[1],
+                "muni": r[2],
+                "assessed_value": r[3],
+                "total_assessed_value": r[4],
+                "owners_name_1": r[5],
+                "owners_name_2": r[6],
+                "deal_score": r[7],
+                "sale_type": r[8],
+            }
+            for r in rows
+        ]
+    }
+>>>>>>> refs/remotes/origin/dev
+
 
 @app.get("/search")
 def search_deals(q: str, limit: int = 50):
+<<<<<<< HEAD
      conn = get_conn()
      ensure_properties_schema(conn)
      cur = conn.cursor()
 
      cur.execute(
          """
+=======
+    conn = get_conn()
+    ensure_properties_schema(conn)
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            parcel_id,
+            address,
+            muni,
+            assessed_value,
+            total_assessed_value,
+            owners_name_1,
+            owners_name_2,
+            deal_score,
+            sale_type
+        FROM properties
+        WHERE deal_score IS NOT NULL
+          AND address ILIKE %s
+        ORDER BY deal_score DESC
+        LIMIT %s
+        """,
+        (f"%{q}%", limit),
+    )
+    rows = cur.fetchall()
+>>>>>>> refs/remotes/origin/dev
 
         SELECT
             parcel_id,
@@ -109,6 +185,7 @@ def search_deals(q: str, limit: int = 50):
      )
      rows = cur.fetchall()
 
+<<<<<<< HEAD
      cur.close()
      conn.close()
 
@@ -129,3 +206,21 @@ def search_deals(q: str, limit: int = 50):
              for r in rows
          ]
      }
+=======
+    return {
+        "results": [
+            {
+                "parcel_id": r[0],
+                "address": r[1],
+                "muni": r[2],
+                "assessed_value": r[3],
+                "total_assessed_value": r[4],
+                "owners_name_1": r[5],
+                "owners_name_2": r[6],
+                "deal_score": r[7],
+                "sale_type": r[8],
+            }
+            for r in rows
+        ]
+    }
+>>>>>>> refs/remotes/origin/dev
