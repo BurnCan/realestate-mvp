@@ -3,15 +3,17 @@ import axios from "axios";
 
 const API = "http://127.0.0.1:8000";
 
+const hasBankWord = (ownerName) => /\bbank\b/.test(ownerName);
+
 const isDistressedProperty = (deal) => {
   const owner1 = (deal.owners_name_1 || "").toLowerCase();
   const owner2 = (deal.owners_name_2 || "").toLowerCase();
 
   return (
     owner1.includes("secretary") ||
-    owner1.includes("bank") ||
+    hasBankWord(owner1) ||
     owner2.includes("secretary") ||
-    owner2.includes("bank")
+    hasBankWord(owner2)
   );
 };
 

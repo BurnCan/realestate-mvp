@@ -56,9 +56,9 @@ def get_deals(
         base_query += """
             AND (
                 LOWER(COALESCE(owners_name_1, '')) LIKE '%%secretary%%'
-                OR LOWER(COALESCE(owners_name_1, '')) LIKE '%%bank%%'
+                OR LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
                 OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%secretary%%'
-                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%bank%%'
+                OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
             )
         """
 

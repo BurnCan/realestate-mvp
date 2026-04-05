@@ -1,4 +1,5 @@
 import math
+import re
 from db import get_conn
 
 
@@ -27,12 +28,13 @@ def compute_score(p):
     # -------------------------
     owner_1 = (p["owners_name_1"] or "").lower()
     owner_2 = (p["owners_name_2"] or "").lower()
-    distress_terms = ("secretary", "bank")
-
     distress_score = 0.0
 
     # owner-name distress heuristic (sale type no longer used)
-    if any(term in owner_1 or term in owner_2 for term in distress_terms):
+    has_secretary = "secretary" in owner_1 or "secretary" in owner_2
+    has_bank_word = bool(re.search(r"\bbank\b", owner_1)) or bool(re.search(r"\bbank\b", owner_2))
+
+    if has_secretary or has_bank_word:
         distress_score += 2.0
 
     # -------------------------
