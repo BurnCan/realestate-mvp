@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db import get_conn
+from .db import ensure_properties_schema, get_conn
 
 app = FastAPI()
 
@@ -21,10 +21,20 @@ def get_deals(
     limit: int = 50,
 ):
     conn = get_conn()
+    ensure_properties_schema(conn)
     cur = conn.cursor()
 
     query = """
-        SELECT parcel_id, address, muni, assessed_value, deal_score, sale_type
+        SELECT
+            parcel_id,
+            address,
+            muni,
+            assessed_value,
+            total_assessed_value,
+            owners_name_1,
+            owners_name_2,
+            deal_score,
+            sale_type
         FROM properties
         WHERE deal_score IS NOT NULL
     """
@@ -55,21 +65,35 @@ def get_deals(
                 "address": r[1],
                 "muni": r[2],
                 "assessed_value": r[3],
-                "deal_score": r[4],
-                "sale_type": r[5],
+                "total_assessed_value": r[4],
+                "owners_name_1": r[5],
+                "owners_name_2": r[6],
+                "deal_score": r[7],
+                "sale_type": r[8],
             }
             for r in rows
         ]
     }
 
+
 @app.get("/search")
 def search_deals(q: str, limit: int = 50):
     conn = get_conn()
+    ensure_properties_schema(conn)
     cur = conn.cursor()
 
     cur.execute(
         """
-        SELECT parcel_id, address, muni, assessed_value, deal_score, sale_type
+        SELECT
+            parcel_id,
+            address,
+            muni,
+            assessed_value,
+            total_assessed_value,
+            owners_name_1,
+            owners_name_2,
+            deal_score,
+            sale_type
         FROM properties
         WHERE deal_score IS NOT NULL
           AND address ILIKE %s
@@ -90,8 +114,11 @@ def search_deals(q: str, limit: int = 50):
                 "address": r[1],
                 "muni": r[2],
                 "assessed_value": r[3],
-                "deal_score": r[4],
-                "sale_type": r[5],
+                "total_assessed_value": r[4],
+                "owners_name_1": r[5],
+                "owners_name_2": r[6],
+                "deal_score": r[7],
+                "sale_type": r[8],
             }
             for r in rows
         ]

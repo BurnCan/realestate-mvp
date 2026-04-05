@@ -30,8 +30,6 @@ export default function App() {
       .finally(() => {
         setLoading(false);
       });
-
-
   };
 
   // -------------------------
@@ -53,8 +51,6 @@ export default function App() {
       .finally(() => {
         setLoading(false);
       });
-
-
   };
 
   // -------------------------
@@ -109,8 +105,10 @@ export default function App() {
           <tr>
             <th>Parcel ID</th>
             <th>Address</th>
+            <th>Owner 1</th>
+            <th>Owner 2</th>
             <th>Muni</th>
-            <th>Assessed Value</th>
+            <th>Total Assessed Value</th>
             <th>Deal Score</th>
             <th>Sale Type</th>
             <th>Status</th>
@@ -121,6 +119,8 @@ export default function App() {
           {deals.map((d) => {
             const saleType = (d.sale_type || "").toLowerCase();
             const score = d.deal_score ?? 0;
+            const totalAssessedValue =
+              d.total_assessed_value ?? d.assessed_value ?? null;
 
             // -------------------------
             // improved distress logic
@@ -141,8 +141,14 @@ export default function App() {
               >
                 <td>{d.parcel_id}</td>
                 <td>{d.address}</td>
+                <td>{d.owners_name_1 || "—"}</td>
+                <td>{d.owners_name_2 || "—"}</td>
                 <td>{d.muni}</td>
-                <td>${d.assessed_value?.toLocaleString()}</td>
+                <td>
+                  {totalAssessedValue != null
+                    ? `$${totalAssessedValue.toLocaleString()}`
+                    : "—"}
+                </td>
 
                 <td>
                   <b>{score.toFixed(2)}</b>

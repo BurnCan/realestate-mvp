@@ -1,7 +1,7 @@
 import requests
 import time
 
-from db import get_conn
+from db import ensure_properties_schema, get_conn
 from parser import parse
 
 URL = "https://gis.northamptoncounty.org/arcgisweb/rest/services/Assessment_Services/Land_Records_LGM/MapServer/0/query"
@@ -28,17 +28,20 @@ def upsert(cur, p):
         INSERT INTO properties (
             parcel_id, address,
             muni, neighborhood,
-            assessed_value, land_value, building_value,
+            assessed_value, total_assessed_value, owners_name_1, owners_name_2, land_value, building_value,
             sale_price, sale_date, sale_type, sale_validity_code,
             sqft_living_area, bedrooms, bathrooms, half_baths, stories, year_built
         )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT (parcel_id)
         DO UPDATE SET
             address = EXCLUDED.address,
             muni = EXCLUDED.muni,
             neighborhood = EXCLUDED.neighborhood,
             assessed_value = EXCLUDED.assessed_value,
+            total_assessed_value = EXCLUDED.total_assessed_value,
+            owners_name_1 = EXCLUDED.owners_name_1,
+            owners_name_2 = EXCLUDED.owners_name_2,
             land_value = EXCLUDED.land_value,
             building_value = EXCLUDED.building_value,
             sale_price = EXCLUDED.sale_price,
@@ -58,6 +61,9 @@ def upsert(cur, p):
         p["muni"],
         p["neighborhood"],
         p["assessed_value"],
+        p["total_assessed_value"],
+        p["owners_name_1"],
+        p["owners_name_2"],
         p["land_value"],
         p["building_value"],
         p["sale_price"],
@@ -75,6 +81,7 @@ def upsert(cur, p):
 
 def run():
     conn = get_conn()
+    ensure_properties_schema(conn)
     cur = conn.cursor()
 
     offset = 0
