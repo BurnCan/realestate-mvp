@@ -87,6 +87,7 @@ export default function App() {
           <tr>
             <th>Parcel ID</th>
             <th>Address</th>
+            <th>Owner Hidden Name</th>
             <th>Owner 1</th>
             <th>Owner 2</th>
             <th>Muni</th>
@@ -118,6 +119,7 @@ export default function App() {
               >
                 <td>{d.parcel_id}</td>
                 <td>{d.address}</td>
+                <td>{d.owners_hidename || "—"}</td>
                 <td>{d.owners_name_1 || "—"}</td>
                 <td>{d.owners_name_2 || "—"}</td>
                 <td>{d.muni}</td>
