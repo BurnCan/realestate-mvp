@@ -100,17 +100,19 @@ export default function App() {
 
         <tbody>
           {deals.map((d) => {
-            const saleType = (d.sale_type || "").toLowerCase();
+            const owner1 = (d.owners_name_1 || "").toLowerCase();
+            const owner2 = (d.owners_name_2 || "").toLowerCase();
             const score = d.deal_score ?? 0;
             const totalAssessedValue =
               d.total_assessed_value ?? d.assessed_value ?? null;
 
             const isDistressed =
-              saleType.includes("foreclosure") ||
-              saleType.includes("reo") ||
-              saleType.includes("bank") ||
-              saleType.includes("lien") ||
-              score >= 2.0;
+              owner1.includes("llc") ||
+              owner1.includes("secretary") ||
+              owner1.includes("bank") ||
+              owner2.includes("llc") ||
+              owner2.includes("secretary") ||
+              owner2.includes("bank");
 
             return (
               <tr

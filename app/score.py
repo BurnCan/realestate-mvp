@@ -12,9 +12,6 @@ def compute_score(p):
     year_built = p["year_built"] or 2000
     sqft = f(p["sqft"])
 
-    sale_type = (p["sale_type"] or "").lower()
-    validity = (p["sale_validity_code"] or "").lower()
-
     # -------------------------
     # 1. VALUE DISCOUNT
     # -------------------------
@@ -28,27 +25,15 @@ def compute_score(p):
     # -------------------------
     # 2. DISTRESS BONUS
     # -------------------------
-    sale_type = str(p["sale_type"] or "").strip()
+    owner_1 = (p["owners_name_1"] or "").lower()
+    owner_2 = (p["owners_name_2"] or "").lower()
+    distress_terms = ("llc", "secretary", "bank")
 
     distress_score = 0.0
 
-    # -------------------------
-    # PRIMARY SIGNAL (strong)
-    # -------------------------
-    if sale_type == "3":
+    # owner-name distress heuristic (sale type no longer used)
+    if any(term in owner_1 or term in owner_2 for term in distress_terms):
         distress_score += 2.0
-
-    # -------------------------
-    # SECONDARY SIGNAL (weak)
-    # -------------------------
-    elif sale_type == "1":
-        distress_score += 0.5
-
-    # -------------------------
-    # UNKNOWN DATA (neutral, but slightly penalize confidence)
-    # -------------------------
-    elif sale_type == "":
-        distress_score += 0.2
 
     # -------------------------
     # 3. QUALITY SCORE
@@ -80,6 +65,8 @@ def run():
             sale_price,
             sale_type,
             sale_validity_code,
+            owners_name_1,
+            owners_name_2,
             year_built,
             sqft_living_area
         FROM properties
@@ -95,8 +82,10 @@ def run():
             "sale_price": r[2],
             "sale_type": r[3],
             "sale_validity_code": r[4],
-            "year_built": r[5],
-            "sqft": r[6],
+            "owners_name_1": r[5],
+            "owners_name_2": r[6],
+            "year_built": r[7],
+            "sqft": r[8],
         }
 
         score = compute_score(p)
