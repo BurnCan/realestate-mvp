@@ -19,14 +19,14 @@ def get_deals(
     muni: str | None = None,
     min_score: float = 0,
     limit: int = 50,
+    page: int = 1,
     distressed_only: bool = False,
-    all_results: bool = False,
 ):
     conn = get_conn()
     ensure_properties_schema(conn)
     cur = conn.cursor()
 
-    query = """
+    base_query = """
         SELECT
             parcel_id,
             address,
@@ -45,15 +45,15 @@ def get_deals(
     params = []
 
     if muni:
-        query += " AND muni = %s"
+        base_query += " AND muni = %s"
         params.append(muni)
 
     if min_score is not None:
-        query += " AND deal_score >= %s"
+        base_query += " AND deal_score >= %s"
         params.append(min_score)
 
     if distressed_only:
-        query += """
+        base_query += """
             AND (
                 LOWER(COALESCE(owners_name_1, '')) LIKE '%llc%'
                 OR LOWER(COALESCE(owners_name_1, '')) LIKE '%secretary%'
@@ -64,13 +64,18 @@ def get_deals(
             )
         """
 
-    query += " ORDER BY deal_score DESC"
+    page = max(page, 1)
+    limit = max(limit, 1)
+    offset = (page - 1) * limit
 
-    if not all_results:
-        query += " LIMIT %s"
-        params.append(limit)
+    count_query = f"SELECT COUNT(*) FROM ({base_query}) AS filtered_properties"
+    cur.execute(count_query, params)
+    total = cur.fetchone()[0]
 
-    cur.execute(query, params)
+    query = f"{base_query} ORDER BY deal_score DESC LIMIT %s OFFSET %s"
+    query_params = params + [limit, offset]
+
+    cur.execute(query, query_params)
     rows = cur.fetchall()
 
     cur.close()
@@ -91,7 +96,13 @@ def get_deals(
                 "sale_type": r[9],
             }
             for r in rows
-        ]
+        ],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": (total + limit - 1) // limit,
+        },
     }
 
 
