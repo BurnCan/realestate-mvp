@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 def to_date(v):
     if v is None:
         return None
@@ -33,6 +34,8 @@ def to_date(v):
 def parse(feature):
     a = feature.get("attributes", {})
 
+    total_assessed_value = a.get("TOTAL_ASSESSED_VALUE")
+
     return {
         "parcel_id": a.get("PARCEL_ID"),
         "address": (a.get("LOCATION") or "").strip(),
@@ -40,7 +43,11 @@ def parse(feature):
         "muni": a.get("MUNI"),
         "neighborhood": a.get("NBHD"),
 
-        "assessed_value": a.get("TOTAL_ASSESSED_VALUE"),
+        # keep assessed_value for backward compatibility with scoring logic
+        "assessed_value": total_assessed_value,
+        "total_assessed_value": total_assessed_value,
+        "owners_name_1": a.get("OWNERS_NAME_1"),
+        "owners_name_2": a.get("OWNERS_NAME_2"),
         "land_value": a.get("LAND_ASSESSMENT"),
         "building_value": a.get("BUILDING_ASSESSMENT"),
 
