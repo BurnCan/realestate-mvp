@@ -1,47 +1,4 @@
-
 import psycopg2
-<<<<<<< HEAD
-
-
-DB_CONFIG = {
-     "dbname": "realestate",
-     "user": "realuser",
-     "password": "password",
-     "host": "localhost",
-
-     "port": 5432,
- }
-
-
-REQUIRED_PROPERTY_COLUMNS = {
-    "parcel_id": "TEXT UNIQUE",
-    "address": "TEXT",
-    "muni": "TEXT",
-    "neighborhood": "TEXT",
-    "assessed_value": "BIGINT",
-    "total_assessed_value": "BIGINT",
-    "owners_name_1": "TEXT",
-    "owners_name_2": "TEXT",
-    "land_value": "BIGINT",
-    "building_value": "BIGINT",
-    "sale_price": "BIGINT",
-    "sale_date": "TIMESTAMP",
-    "sale_type": "TEXT",
-    "sale_validity_code": "TEXT",
-    "sqft_living_area": "NUMERIC",
-    "bedrooms": "NUMERIC",
-    "bathrooms": "NUMERIC",
-    "half_baths": "NUMERIC",
-    "stories": "NUMERIC",
-    "year_built": "INT",
-    "deal_score": "NUMERIC",
-    "updated_at": "TIMESTAMP DEFAULT NOW()",
-}
-
-
-def get_conn():
-     return psycopg2.connect(**DB_CONFIG)
-=======
 
 DB_CONFIG = {
     "dbname": "realestate",
@@ -50,7 +7,6 @@ DB_CONFIG = {
     "host": "localhost",
     "port": 5432,
 }
-
 
 REQUIRED_PROPERTY_COLUMNS = {
     "parcel_id": "TEXT UNIQUE",
@@ -80,7 +36,6 @@ REQUIRED_PROPERTY_COLUMNS = {
 
 def get_conn():
     return psycopg2.connect(**DB_CONFIG)
->>>>>>> refs/remotes/origin/dev
 
 
 def ensure_properties_schema(conn):
@@ -107,7 +62,3 @@ def ensure_properties_schema(conn):
 
     conn.commit()
     cur.close()
-<<<<<<< HEAD
-
-=======
->>>>>>> refs/remotes/origin/dev
