@@ -43,6 +43,7 @@ def parse(feature):
         # keep assessed_value for backward compatibility with scoring logic
         "assessed_value": total_assessed_value,
         "total_assessed_value": total_assessed_value,
+        "owners_hidename": a.get("OWNERS_HIDENAME"),
         "owners_name_1": a.get("OWNERS_NAME_1"),
         "owners_name_2": a.get("OWNERS_NAME_2"),
         "land_value": a.get("LAND_ASSESSMENT"),

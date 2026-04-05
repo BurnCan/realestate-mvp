@@ -6,6 +6,7 @@ CREATE TABLE properties (
     neighborhood TEXT,
     assessed_value BIGINT,
     total_assessed_value BIGINT,
+    owners_hidename TEXT,
     owners_name_1 TEXT,
     owners_name_2 TEXT,
     land_value BIGINT,

@@ -27,6 +27,7 @@ def get_deals(muni: str | None = None, min_score: float = 0, limit: int = 50):
             muni,
             assessed_value,
             total_assessed_value,
+            owners_hidename,
             owners_name_1,
             owners_name_2,
             deal_score,
@@ -62,10 +63,11 @@ def get_deals(muni: str | None = None, min_score: float = 0, limit: int = 50):
                 "muni": r[2],
                 "assessed_value": r[3],
                 "total_assessed_value": r[4],
-                "owners_name_1": r[5],
-                "owners_name_2": r[6],
-                "deal_score": r[7],
-                "sale_type": r[8],
+                "owners_hidename": r[5],
+                "owners_name_1": r[6],
+                "owners_name_2": r[7],
+                "deal_score": r[8],
+                "sale_type": r[9],
             }
             for r in rows
         ]
@@ -86,6 +88,7 @@ def search_deals(q: str, limit: int = 50):
             muni,
             assessed_value,
             total_assessed_value,
+            owners_hidename,
             owners_name_1,
             owners_name_2,
             deal_score,
@@ -111,10 +114,11 @@ def search_deals(q: str, limit: int = 50):
                 "muni": r[2],
                 "assessed_value": r[3],
                 "total_assessed_value": r[4],
-                "owners_name_1": r[5],
-                "owners_name_2": r[6],
-                "deal_score": r[7],
-                "sale_type": r[8],
+                "owners_hidename": r[5],
+                "owners_name_1": r[6],
+                "owners_name_2": r[7],
+                "deal_score": r[8],
+                "sale_type": r[9],
             }
             for r in rows
         ]
