@@ -13,41 +13,48 @@ export default function App() {
   // -------------------------
   // Fetch main deals feed
   // -------------------------
-  const fetchDeals = async () => {
+  const fetchDeals = () => {
     setLoading(true);
 
-    try {
-      const res = await axios.get(`${API}/deals`, {
+    axios
+      .get(`${API}/deals`, {
         params: {
           muni: muni || undefined,
           min_score: minScore || 0,
           limit: 50,
         },
+      })
+      .then((res) => {
+        setDeals(res.data.results || []);
+      })
+      .finally(() => {
+        setLoading(false);
       });
 
-      setDeals(res.data.results || []);
-    } finally {
-      setLoading(false);
-    }
+
   };
 
   // -------------------------
   // Search endpoint
   // -------------------------
-  const searchDeals = async (q) => {
-    if (!q) return fetchDeals();
+  const searchDeals = (q) => {
+    const query = (q || "").trim();
+    if (!query) return fetchDeals();
 
     setLoading(true);
 
-    try {
-      const res = await axios.get(`${API}/search`, {
-        params: { q },
+    axios
+      .get(`${API}/search`, {
+        params: { q: query },
+      })
+      .then((res) => {
+        setDeals(res.data.results || []);
+      })
+      .finally(() => {
+        setLoading(false);
       });
 
-      setDeals(res.data.results || []);
-    } finally {
-      setLoading(false);
-    }
+
   };
 
   // -------------------------
@@ -71,6 +78,7 @@ export default function App() {
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
         />
+        <button onClick={() => searchDeals(search)}>Search</button>
 
         <input
           placeholder="Muni"

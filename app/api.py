@@ -61,3 +61,38 @@ def get_deals(
             for r in rows
         ]
     }
+
+@app.get("/search")
+def search_deals(q: str, limit: int = 50):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT parcel_id, address, muni, assessed_value, deal_score, sale_type
+        FROM properties
+        WHERE deal_score IS NOT NULL
+          AND address ILIKE %s
+        ORDER BY deal_score DESC
+        LIMIT %s
+        """,
+        (f"%{q}%", limit),
+    )
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return {
+        "results": [
+            {
+                "parcel_id": r[0],
+                "address": r[1],
+                "muni": r[2],
+                "assessed_value": r[3],
+                "deal_score": r[4],
+                "sale_type": r[5],
+            }
+            for r in rows
+        ]
+    }
