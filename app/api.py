@@ -24,22 +24,30 @@ def _normalize_address(value: str | None) -> str:
 
 
 @lru_cache(maxsize=1)
-def get_sheriff_sale_matches() -> set[tuple[str, str]]:
-    sheriff_files = sorted(Path(".").glob("sheriff_sale_*.csv"), reverse=True)
-    if not sheriff_files:
+def get_sheriff_sale_matches() -> set[str]:
+    csv_files = sorted(Path(".").glob("*.csv"), reverse=True)
+    if not csv_files:
         return set()
 
-    latest_file = sheriff_files[0]
-    matches: set[tuple[str, str]] = set()
+    matches: set[str] = set()
 
-    with latest_file.open(newline="", encoding="utf-8-sig") as csv_file:
-        reader = csv.DictReader(csv_file)
-        for row in reader:
-            normalized_address = _normalize_address(row.get("Address"))
-            normalized_muni = _normalize_text(row.get("Municipality"))
-            if not normalized_address or not normalized_muni:
+    for csv_path in csv_files:
+        with csv_path.open(newline="", encoding="utf-8-sig") as csv_file:
+            reader = csv.DictReader(csv_file)
+            if not reader.fieldnames:
                 continue
-            matches.add((normalized_address, normalized_muni))
+
+            address_field = next(
+                (name for name in reader.fieldnames if _normalize_text(name) == "address"),
+                None,
+            )
+            if not address_field:
+                continue
+
+            for row in reader:
+                normalized_address = _normalize_address(row.get(address_field))
+                if normalized_address:
+                    matches.add(normalized_address)
 
     return matches
 
@@ -48,7 +56,7 @@ def is_sheriff_sale_property(address: str | None, muni: str | None) -> bool:
     matches = get_sheriff_sale_matches()
     if not matches:
         return False
-    return (_normalize_address(address), _normalize_text(muni)) in matches
+    return _normalize_address(address) in matches
 
 app.add_middleware(
     CORSMiddleware,
