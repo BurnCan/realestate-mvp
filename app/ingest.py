@@ -27,11 +27,12 @@ def upsert(cur, p):
         INSERT INTO properties (
             parcel_id, address,
             muni, neighborhood,
-            assessed_value, total_assessed_value, owners_hidename, owners_name_1, owners_name_2, land_value, building_value,
+            assessed_value, total_assessed_value, owners_hidename, owners_name_1, owners_name_2,
+            mail_address_1, mail_address_2, mail_address_3, land_value, building_value,
             sale_price, sale_date, sale_type, sale_validity_code,
             sqft_living_area, bedrooms, bathrooms, half_baths, stories, year_built
         )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT (parcel_id)
         DO UPDATE SET
             address = EXCLUDED.address,
@@ -42,6 +43,9 @@ def upsert(cur, p):
             owners_hidename = EXCLUDED.owners_hidename,
             owners_name_1 = EXCLUDED.owners_name_1,
             owners_name_2 = EXCLUDED.owners_name_2,
+            mail_address_1 = EXCLUDED.mail_address_1,
+            mail_address_2 = EXCLUDED.mail_address_2,
+            mail_address_3 = EXCLUDED.mail_address_3,
             land_value = EXCLUDED.land_value,
             building_value = EXCLUDED.building_value,
             sale_price = EXCLUDED.sale_price,
@@ -66,6 +70,9 @@ def upsert(cur, p):
             p["owners_hidename"],
             p["owners_name_1"],
             p["owners_name_2"],
+            p["mail_address_1"],
+            p["mail_address_2"],
+            p["mail_address_3"],
             p["land_value"],
             p["building_value"],
             p["sale_price"],

@@ -78,6 +78,7 @@ const DealsTable = ({ deals }) => (
         <th>Owner Hidden Name</th>
         <th>Owner 1</th>
         <th>Owner 2</th>
+        <th>Mailing Address</th>
         <th>Muni</th>
         <th>Total Assessed Value</th>
         <th>Deal Score</th>
@@ -91,6 +92,13 @@ const DealsTable = ({ deals }) => (
         const score = d.deal_score ?? 0;
         const totalAssessedValue = d.total_assessed_value ?? d.assessed_value ?? null;
         const isDistressed = isDistressedProperty(d);
+        const mailingAddress = [
+          d.mail_address_1,
+          d.mail_address_2,
+          d.mail_address_3,
+        ]
+          .filter((line) => line && String(line).trim())
+          .join(", ");
 
         return (
           <tr
@@ -102,6 +110,7 @@ const DealsTable = ({ deals }) => (
             <td>{d.owners_hidename || "—"}</td>
             <td>{d.owners_name_1 || "—"}</td>
             <td>{d.owners_name_2 || "—"}</td>
+            <td>{mailingAddress || "—"}</td>
             <td>{formatMuni(d.muni)}</td>
             <td>
               {totalAssessedValue != null

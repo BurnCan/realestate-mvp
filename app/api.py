@@ -36,6 +36,9 @@ def get_deals(
             owners_hidename,
             owners_name_1,
             owners_name_2,
+            mail_address_1,
+            mail_address_2,
+            mail_address_3,
             deal_score,
             sale_type
         FROM properties
@@ -90,8 +93,11 @@ def get_deals(
                 "owners_hidename": r[5],
                 "owners_name_1": r[6],
                 "owners_name_2": r[7],
-                "deal_score": r[8],
-                "sale_type": r[9],
+                "mail_address_1": r[8],
+                "mail_address_2": r[9],
+                "mail_address_3": r[10],
+                "deal_score": r[11],
+                "sale_type": r[12],
             }
             for r in rows
         ],
@@ -121,6 +127,9 @@ def search_deals(q: str, limit: int = 50):
             owners_hidename,
             owners_name_1,
             owners_name_2,
+            mail_address_1,
+            mail_address_2,
+            mail_address_3,
             deal_score,
             sale_type
         FROM properties
@@ -147,8 +156,11 @@ def search_deals(q: str, limit: int = 50):
                 "owners_hidename": r[5],
                 "owners_name_1": r[6],
                 "owners_name_2": r[7],
-                "deal_score": r[8],
-                "sale_type": r[9],
+                "mail_address_1": r[8],
+                "mail_address_2": r[9],
+                "mail_address_3": r[10],
+                "deal_score": r[11],
+                "sale_type": r[12],
             }
             for r in rows
         ]
