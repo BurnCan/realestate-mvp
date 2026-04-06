@@ -75,6 +75,7 @@ def get_deals(
     page: int = 1,
     distressed_only: bool = False,
     bank_owned_only: bool = False,
+    sheriff_sale_only: bool = False,
 ):
     conn = get_conn()
     ensure_properties_schema(conn)
@@ -129,6 +130,16 @@ def get_deals(
             )
         """
 
+
+    if sheriff_sale_only:
+        sheriff_matches = sorted(get_sheriff_sale_matches())
+        if sheriff_matches:
+            base_query += """
+                AND REGEXP_REPLACE(LOWER(COALESCE(address, '')), '[^a-z0-9 ]', '', 'g') = ANY(%s)
+            """
+            params.append(sheriff_matches)
+        else:
+            base_query += " AND 1 = 0"
     page = max(page, 1)
     limit = max(limit, 1)
     offset = (page - 1) * limit

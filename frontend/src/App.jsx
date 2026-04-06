@@ -183,6 +183,7 @@ export default function App() {
           min_score: minScore || 0,
           distressed_only: distressedOnly || undefined,
           bank_owned_only: bankOwnedOnly || undefined,
+          sheriff_sale_only: sheriffSaleOnly || undefined,
           limit: 50,
           page: pageNumber,
         },
