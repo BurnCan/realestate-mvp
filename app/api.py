@@ -1,9 +1,54 @@
+import csv
+import re
+from functools import lru_cache
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import ensure_properties_schema, get_conn
 
 app = FastAPI()
+
+
+def _normalize_text(value: str | None) -> str:
+    text = (value or "").strip().lower()
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def _normalize_address(value: str | None) -> str:
+    text = _normalize_text(value)
+    # Keep only alphanumeric and spaces for more reliable matching across systems.
+    return re.sub(r"[^a-z0-9 ]", "", text)
+
+
+@lru_cache(maxsize=1)
+def get_sheriff_sale_matches() -> set[tuple[str, str]]:
+    sheriff_files = sorted(Path(".").glob("sheriff_sale_*.csv"), reverse=True)
+    if not sheriff_files:
+        return set()
+
+    latest_file = sheriff_files[0]
+    matches: set[tuple[str, str]] = set()
+
+    with latest_file.open(newline="", encoding="utf-8-sig") as csv_file:
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            normalized_address = _normalize_address(row.get("Address"))
+            normalized_muni = _normalize_text(row.get("Municipality"))
+            if not normalized_address or not normalized_muni:
+                continue
+            matches.add((normalized_address, normalized_muni))
+
+    return matches
+
+
+def is_sheriff_sale_property(address: str | None, muni: str | None) -> bool:
+    matches = get_sheriff_sale_matches()
+    if not matches:
+        return False
+    return (_normalize_address(address), _normalize_text(muni)) in matches
 
 app.add_middleware(
     CORSMiddleware,
@@ -93,25 +138,28 @@ def get_deals(
     cur.close()
     conn.close()
 
+    deals = [
+        {
+            "parcel_id": r[0],
+            "address": r[1],
+            "muni": r[2],
+            "assessed_value": r[3],
+            "total_assessed_value": r[4],
+            "owners_hidename": r[5],
+            "owners_name_1": r[6],
+            "owners_name_2": r[7],
+            "mail_address_1": r[8],
+            "mail_address_2": r[9],
+            "mail_address_3": r[10],
+            "deal_score": r[11],
+            "sale_type": r[12],
+            "is_sheriff_sale": is_sheriff_sale_property(r[1], r[2]),
+        }
+        for r in rows
+    ]
+
     return {
-        "results": [
-            {
-                "parcel_id": r[0],
-                "address": r[1],
-                "muni": r[2],
-                "assessed_value": r[3],
-                "total_assessed_value": r[4],
-                "owners_hidename": r[5],
-                "owners_name_1": r[6],
-                "owners_name_2": r[7],
-                "mail_address_1": r[8],
-                "mail_address_2": r[9],
-                "mail_address_3": r[10],
-                "deal_score": r[11],
-                "sale_type": r[12],
-            }
-            for r in rows
-        ],
+        "results": deals,
         "pagination": {
             "page": page,
             "limit": limit,
@@ -172,6 +220,7 @@ def search_deals(q: str, limit: int = 50):
                 "mail_address_3": r[10],
                 "deal_score": r[11],
                 "sale_type": r[12],
+                "is_sheriff_sale": is_sheriff_sale_property(r[1], r[2]),
             }
             for r in rows
         ]
