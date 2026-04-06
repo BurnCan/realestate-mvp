@@ -54,7 +54,7 @@ const formatMuni = (muniCode) => {
   const normalized = /^\d+$/.test(raw) ? raw.padStart(2, "0") : raw;
   const label = MUNICIPALITIES[normalized];
 
-  return label ? `${normalized} ${label}` : raw;
+  return label || raw;
 };
 
 const isDistressedProperty = (deal) => {
@@ -81,7 +81,7 @@ const DealsTable = ({ deals }) => (
         <th>Owner 1</th>
         <th>Owner 2</th>
         <th>Mailing Address</th>
-        <th>Muni</th>
+        <th>Municipality</th>
         <th>Total Assessed Value</th>
         <th>Deal Score</th>
         <th>Sale Type</th>
@@ -275,7 +275,7 @@ export default function App() {
           <option value="">All municipalities</option>
           {Object.entries(MUNICIPALITIES).map(([code, name]) => (
             <option key={code} value={code}>
-              {code} {name}
+              {name}
             </option>
           ))}
         </select>
