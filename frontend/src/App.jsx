@@ -72,6 +72,18 @@ const isBankOwnedProperty = (deal) => {
 };
 
 const isSheriffSaleProperty = (deal) => Boolean(deal.is_sheriff_sale);
+const matchesOwnershipFilter = ({
+  deal,
+  distressedOnly,
+  bankOwnedOnly,
+}) => {
+  if (distressedOnly && bankOwnedOnly) {
+    return isDistressedProperty(deal) || isBankOwnedProperty(deal);
+  }
+  if (distressedOnly) return isDistressedProperty(deal);
+  if (bankOwnedOnly) return isBankOwnedProperty(deal);
+  return true;
+};
 
 const DealsTable = ({ deals }) => (
   <table width="100%" border="1" cellPadding="8">
@@ -198,8 +210,15 @@ export default function App() {
         };
         setDeals(
           results.filter((deal) => {
-            if (bankOwnedOnly && !isBankOwnedProperty(deal)) return false;
-            if (distressedOnly && !isDistressedProperty(deal)) return false;
+            if (
+              !matchesOwnershipFilter({
+                deal,
+                distressedOnly,
+                bankOwnedOnly,
+              })
+            ) {
+              return false;
+            }
             if (sheriffSaleOnly && !isSheriffSaleProperty(deal)) return false;
             return true;
           }),
@@ -234,8 +253,15 @@ export default function App() {
         const results = res.data.results || [];
         setDeals(
           results.filter((deal) => {
-            if (showBankOwnedOnly && !isBankOwnedProperty(deal)) return false;
-            if (showDistressedOnly && !isDistressedProperty(deal)) return false;
+            if (
+              !matchesOwnershipFilter({
+                deal,
+                distressedOnly: showDistressedOnly,
+                bankOwnedOnly: showBankOwnedOnly,
+              })
+            ) {
+              return false;
+            }
             if (showSheriffSaleOnly && !isSheriffSaleProperty(deal)) return false;
             return true;
           }),

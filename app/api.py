@@ -110,25 +110,30 @@ def get_deals(
         base_query += " AND deal_score >= %s"
         params.append(min_score)
 
-    if distressed_only:
-        base_query += """
-            AND (
-                LOWER(COALESCE(owners_name_1, '')) LIKE '%%secretary%%'
-                OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%secretary%%'
-            )
-            AND NOT (
-                LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-                OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-            )
-        """
+    distressed_condition = """
+        (
+            LOWER(COALESCE(owners_name_1, '')) LIKE '%%secretary%%'
+            OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%secretary%%'
+        )
+        AND NOT (
+            LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+            OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+        )
+    """
 
-    if bank_owned_only:
-        base_query += """
-            AND (
-                LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-                OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-            )
-        """
+    bank_owned_condition = """
+        (
+            LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+            OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+        )
+    """
+
+    if distressed_only and bank_owned_only:
+        base_query += f" AND (({distressed_condition}) OR ({bank_owned_condition}))"
+    elif distressed_only:
+        base_query += f" AND ({distressed_condition})"
+    elif bank_owned_only:
+        base_query += f" AND ({bank_owned_condition})"
 
 
     if sheriff_sale_only:
