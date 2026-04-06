@@ -71,6 +71,8 @@ const isBankOwnedProperty = (deal) => {
   return hasBankWord(owner1) || hasBankWord(owner2);
 };
 
+const isSheriffSaleProperty = (deal) => Boolean(deal.is_sheriff_sale);
+
 const DealsTable = ({ deals }) => (
   <table width="100%" border="1" cellPadding="8">
     <thead>
@@ -94,6 +96,7 @@ const DealsTable = ({ deals }) => (
         const totalAssessedValue = d.total_assessed_value ?? d.assessed_value ?? null;
         const isDistressed = isDistressedProperty(d);
         const isBankOwned = isBankOwnedProperty(d);
+        const isSheriffSale = isSheriffSaleProperty(d);
         const mailingAddress = [
           d.mail_address_1,
           d.mail_address_2,
@@ -106,7 +109,13 @@ const DealsTable = ({ deals }) => (
           <tr
             key={d.parcel_id}
             style={{
-              backgroundColor: isBankOwned ? "#e6f0ff" : isDistressed ? "#ffe6e6" : "white",
+              backgroundColor: isSheriffSale
+                ? "#fff6cc"
+                : isBankOwned
+                  ? "#e6f0ff"
+                  : isDistressed
+                    ? "#ffe6e6"
+                    : "white",
             }}
           >
             <td>{d.parcel_id}</td>
@@ -124,7 +133,15 @@ const DealsTable = ({ deals }) => (
               <b>{score.toFixed(2)}</b>
             </td>
             <td>{d.sale_type || "—"}</td>
-            <td>{isBankOwned ? "🏦 Bank Owned" : isDistressed ? "🔥 Distressed" : "—"}</td>
+            <td>
+              {isSheriffSale
+                ? "⚖️ Sheriff Sale"
+                : isBankOwned
+                  ? "🏦 Bank Owned"
+                  : isDistressed
+                    ? "🔥 Distressed"
+                    : "—"}
+            </td>
           </tr>
         );
       })}
@@ -140,6 +157,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
+  const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -149,7 +167,12 @@ export default function App() {
   });
   const [isSearchMode, setIsSearchMode] = useState(false);
 
-  const fetchDeals = ({ distressedOnly = false, bankOwnedOnly = false, pageNumber = 1 } = {}) => {
+  const fetchDeals = ({
+    distressedOnly = false,
+    bankOwnedOnly = false,
+    sheriffSaleOnly = false,
+    pageNumber = 1,
+  } = {}) => {
     setLoading(true);
     setIsSearchMode(false);
 
@@ -176,6 +199,7 @@ export default function App() {
           results.filter((deal) => {
             if (bankOwnedOnly && !isBankOwnedProperty(deal)) return false;
             if (distressedOnly && !isDistressedProperty(deal)) return false;
+            if (sheriffSaleOnly && !isSheriffSaleProperty(deal)) return false;
             return true;
           }),
         );
@@ -193,6 +217,7 @@ export default function App() {
       return fetchDeals({
         distressedOnly: showDistressedOnly,
         bankOwnedOnly: showBankOwnedOnly,
+        sheriffSaleOnly: showSheriffSaleOnly,
         pageNumber: 1,
       });
     }
@@ -210,6 +235,7 @@ export default function App() {
           results.filter((deal) => {
             if (showBankOwnedOnly && !isBankOwnedProperty(deal)) return false;
             if (showDistressedOnly && !isDistressedProperty(deal)) return false;
+            if (showSheriffSaleOnly && !isSheriffSaleProperty(deal)) return false;
             return true;
           }),
         );
@@ -234,6 +260,7 @@ export default function App() {
     fetchDeals({
       distressedOnly: showDistressedOnly,
       bankOwnedOnly: showBankOwnedOnly,
+      sheriffSaleOnly: showSheriffSaleOnly,
       pageNumber: 1,
     });
   };
@@ -243,6 +270,7 @@ export default function App() {
     fetchDeals({
       distressedOnly: showDistressedOnly,
       bankOwnedOnly: showBankOwnedOnly,
+      sheriffSaleOnly: showSheriffSaleOnly,
       pageNumber: page + 1,
     });
   };
@@ -252,6 +280,7 @@ export default function App() {
     fetchDeals({
       distressedOnly: showDistressedOnly,
       bankOwnedOnly: showBankOwnedOnly,
+      sheriffSaleOnly: showSheriffSaleOnly,
       pageNumber: page - 1,
     });
   };
@@ -301,6 +330,15 @@ export default function App() {
             onChange={(e) => setShowBankOwnedOnly(e.target.checked)}
           />
           Bank owned properties only
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={showSheriffSaleOnly}
+            onChange={(e) => setShowSheriffSaleOnly(e.target.checked)}
+          />
+          Sheriff sale only
         </label>
 
         <button onClick={applyFilters}>Apply Filters</button>
