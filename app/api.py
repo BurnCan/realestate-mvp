@@ -128,23 +128,27 @@ def get_deals(
         )
     """
 
-    if distressed_only and bank_owned_only:
-        base_query += f" AND (({distressed_condition}) OR ({bank_owned_condition}))"
-    elif distressed_only:
-        base_query += f" AND ({distressed_condition})"
-    elif bank_owned_only:
-        base_query += f" AND ({bank_owned_condition})"
+    status_conditions: list[str] = []
 
+    if distressed_only:
+        status_conditions.append(f"({distressed_condition})")
+
+    if bank_owned_only:
+        status_conditions.append(f"({bank_owned_condition})")
 
     if sheriff_sale_only:
         sheriff_matches = sorted(get_sheriff_sale_matches())
         if sheriff_matches:
-            base_query += """
-                AND REGEXP_REPLACE(LOWER(COALESCE(address, '')), '[^a-z0-9 ]', '', 'g') = ANY(%s)
-            """
+            status_conditions.append(
+                "REGEXP_REPLACE(LOWER(COALESCE(address, '')), '[^a-z0-9 ]', '', 'g') = ANY(%s)"
+            )
             params.append(sheriff_matches)
-        else:
-            base_query += " AND 1 = 0"
+
+    if status_conditions:
+        base_query += " AND (" + " OR ".join(status_conditions) + ")"
+    elif sheriff_sale_only:
+        # Sheriff sale filter selected but no sheriff addresses were found.
+        base_query += " AND 1 = 0"
     page = max(page, 1)
     limit = max(limit, 1)
     offset = (page - 1) * limit

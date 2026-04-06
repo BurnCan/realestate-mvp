@@ -72,17 +72,20 @@ const isBankOwnedProperty = (deal) => {
 };
 
 const isSheriffSaleProperty = (deal) => Boolean(deal.is_sheriff_sale);
-const matchesOwnershipFilter = ({
+const matchesStatusFilters = ({
   deal,
   distressedOnly,
   bankOwnedOnly,
+  sheriffSaleOnly,
 }) => {
-  if (distressedOnly && bankOwnedOnly) {
-    return isDistressedProperty(deal) || isBankOwnedProperty(deal);
-  }
-  if (distressedOnly) return isDistressedProperty(deal);
-  if (bankOwnedOnly) return isBankOwnedProperty(deal);
-  return true;
+  const selectedFilters = [
+    distressedOnly && isDistressedProperty(deal),
+    bankOwnedOnly && isBankOwnedProperty(deal),
+    sheriffSaleOnly && isSheriffSaleProperty(deal),
+  ];
+
+  const anyFilterSelected = distressedOnly || bankOwnedOnly || sheriffSaleOnly;
+  return anyFilterSelected ? selectedFilters.some(Boolean) : true;
 };
 
 const DealsTable = ({ deals }) => (
@@ -210,17 +213,12 @@ export default function App() {
         };
         setDeals(
           results.filter((deal) => {
-            if (
-              !matchesOwnershipFilter({
-                deal,
-                distressedOnly,
-                bankOwnedOnly,
-              })
-            ) {
-              return false;
-            }
-            if (sheriffSaleOnly && !isSheriffSaleProperty(deal)) return false;
-            return true;
+            return matchesStatusFilters({
+              deal,
+              distressedOnly,
+              bankOwnedOnly,
+              sheriffSaleOnly,
+            });
           }),
         );
         setPagination(nextPagination);
@@ -253,17 +251,12 @@ export default function App() {
         const results = res.data.results || [];
         setDeals(
           results.filter((deal) => {
-            if (
-              !matchesOwnershipFilter({
-                deal,
-                distressedOnly: showDistressedOnly,
-                bankOwnedOnly: showBankOwnedOnly,
-              })
-            ) {
-              return false;
-            }
-            if (showSheriffSaleOnly && !isSheriffSaleProperty(deal)) return false;
-            return true;
+            return matchesStatusFilters({
+              deal,
+              distressedOnly: showDistressedOnly,
+              bankOwnedOnly: showBankOwnedOnly,
+              sheriffSaleOnly: showSheriffSaleOnly,
+            });
           }),
         );
         setPagination({
