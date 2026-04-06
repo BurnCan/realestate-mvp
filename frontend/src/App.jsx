@@ -77,11 +77,10 @@ const DealsTable = ({ deals }) => (
       <tr>
         <th>Parcel ID</th>
         <th>Address</th>
-        <th>Owner Hidden Name</th>
+        <th>Municipality</th>
         <th>Owner 1</th>
         <th>Owner 2</th>
         <th>Mailing Address</th>
-        <th>Municipality</th>
         <th>Total Assessed Value</th>
         <th>Deal Score</th>
         <th>Sale Type</th>
@@ -112,11 +111,10 @@ const DealsTable = ({ deals }) => (
           >
             <td>{d.parcel_id}</td>
             <td>{d.address}</td>
-            <td>{d.owners_hidename || "—"}</td>
+            <td>{formatMuni(d.muni)}</td>
             <td>{d.owners_name_1 || "—"}</td>
             <td>{d.owners_name_2 || "—"}</td>
             <td>{mailingAddress || "—"}</td>
-            <td>{formatMuni(d.muni)}</td>
             <td>
               {totalAssessedValue != null
                 ? `$${totalAssessedValue.toLocaleString()}`
