@@ -60,13 +60,15 @@ const formatMuni = (muniCode) => {
 const isDistressedProperty = (deal) => {
   const owner1 = (deal.owners_name_1 || "").toLowerCase();
   const owner2 = (deal.owners_name_2 || "").toLowerCase();
+  const isBankOwned = hasBankWord(owner1) || hasBankWord(owner2);
 
-  return (
-    owner1.includes("secretary") ||
-    hasBankWord(owner1) ||
-    owner2.includes("secretary") ||
-    hasBankWord(owner2)
-  );
+  return !isBankOwned && (owner1.includes("secretary") || owner2.includes("secretary"));
+};
+
+const isBankOwnedProperty = (deal) => {
+  const owner1 = (deal.owners_name_1 || "").toLowerCase();
+  const owner2 = (deal.owners_name_2 || "").toLowerCase();
+  return hasBankWord(owner1) || hasBankWord(owner2);
 };
 
 const DealsTable = ({ deals }) => (
@@ -92,6 +94,7 @@ const DealsTable = ({ deals }) => (
         const score = d.deal_score ?? 0;
         const totalAssessedValue = d.total_assessed_value ?? d.assessed_value ?? null;
         const isDistressed = isDistressedProperty(d);
+        const isBankOwned = isBankOwnedProperty(d);
         const mailingAddress = [
           d.mail_address_1,
           d.mail_address_2,
@@ -103,7 +106,9 @@ const DealsTable = ({ deals }) => (
         return (
           <tr
             key={d.parcel_id}
-            style={{ backgroundColor: isDistressed ? "#ffe6e6" : "white" }}
+            style={{
+              backgroundColor: isBankOwned ? "#e6f0ff" : isDistressed ? "#ffe6e6" : "white",
+            }}
           >
             <td>{d.parcel_id}</td>
             <td>{d.address}</td>
@@ -121,7 +126,7 @@ const DealsTable = ({ deals }) => (
               <b>{score.toFixed(2)}</b>
             </td>
             <td>{d.sale_type || "—"}</td>
-            <td>{isDistressed ? "🔥 Distressed" : "—"}</td>
+            <td>{isBankOwned ? "🏦 Bank Owned" : isDistressed ? "🔥 Distressed" : "—"}</td>
           </tr>
         );
       })}
@@ -136,6 +141,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
+  const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -145,7 +151,7 @@ export default function App() {
   });
   const [isSearchMode, setIsSearchMode] = useState(false);
 
-  const fetchDeals = ({ distressedOnly = false, pageNumber = 1 } = {}) => {
+  const fetchDeals = ({ distressedOnly = false, bankOwnedOnly = false, pageNumber = 1 } = {}) => {
     setLoading(true);
     setIsSearchMode(false);
 
@@ -155,6 +161,7 @@ export default function App() {
           muni: muni || undefined,
           min_score: minScore || 0,
           distressed_only: distressedOnly || undefined,
+          bank_owned_only: bankOwnedOnly || undefined,
           limit: 50,
           page: pageNumber,
         },
@@ -167,7 +174,13 @@ export default function App() {
           total: results.length,
           total_pages: 1,
         };
-        setDeals(distressedOnly ? results.filter(isDistressedProperty) : results);
+        setDeals(
+          results.filter((deal) => {
+            if (bankOwnedOnly && !isBankOwnedProperty(deal)) return false;
+            if (distressedOnly && !isDistressedProperty(deal)) return false;
+            return true;
+          }),
+        );
         setPagination(nextPagination);
         setPage(nextPagination.page);
       })
@@ -179,7 +192,11 @@ export default function App() {
   const searchDeals = (q) => {
     const query = (q || "").trim();
     if (!query) {
-      return fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: 1 });
+      return fetchDeals({
+        distressedOnly: showDistressedOnly,
+        bankOwnedOnly: showBankOwnedOnly,
+        pageNumber: 1,
+      });
     }
 
     setLoading(true);
@@ -191,7 +208,13 @@ export default function App() {
       })
       .then((res) => {
         const results = res.data.results || [];
-        setDeals(showDistressedOnly ? results.filter(isDistressedProperty) : results);
+        setDeals(
+          results.filter((deal) => {
+            if (showBankOwnedOnly && !isBankOwnedProperty(deal)) return false;
+            if (showDistressedOnly && !isDistressedProperty(deal)) return false;
+            return true;
+          }),
+        );
         setPagination({
           page: 1,
           limit: 50,
@@ -210,17 +233,29 @@ export default function App() {
   }, []);
 
   const applyFilters = () => {
-    fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: 1 });
+    fetchDeals({
+      distressedOnly: showDistressedOnly,
+      bankOwnedOnly: showBankOwnedOnly,
+      pageNumber: 1,
+    });
   };
 
   const goToNextPage = () => {
     if (isSearchMode || page >= pagination.total_pages) return;
-    fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: page + 1 });
+    fetchDeals({
+      distressedOnly: showDistressedOnly,
+      bankOwnedOnly: showBankOwnedOnly,
+      pageNumber: page + 1,
+    });
   };
 
   const goToPreviousPage = () => {
     if (isSearchMode || page <= 1) return;
-    fetchDeals({ distressedOnly: showDistressedOnly, pageNumber: page - 1 });
+    fetchDeals({
+      distressedOnly: showDistressedOnly,
+      bankOwnedOnly: showBankOwnedOnly,
+      pageNumber: page - 1,
+    });
   };
 
   return (
@@ -259,6 +294,15 @@ export default function App() {
             onChange={(e) => setShowDistressedOnly(e.target.checked)}
           />
           Distressed properties only
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={showBankOwnedOnly}
+            onChange={(e) => setShowBankOwnedOnly(e.target.checked)}
+          />
+          Bank owned properties only
         </label>
 
         <button onClick={applyFilters}>Apply Filters</button>
