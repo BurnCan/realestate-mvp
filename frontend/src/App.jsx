@@ -311,7 +311,7 @@ export default function App() {
 
       <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
         <input
-          placeholder="Search address..."
+          placeholder="Search address or owner..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}

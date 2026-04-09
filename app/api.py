@@ -223,11 +223,16 @@ def search_deals(q: str, limit: int = 50):
             sale_type
         FROM properties
         WHERE deal_score IS NOT NULL
-          AND address ILIKE %s
+          AND (
+            address ILIKE %s
+            OR owners_name_1 ILIKE %s
+            OR owners_name_2 ILIKE %s
+            OR owners_hidename ILIKE %s
+          )
         ORDER BY deal_score DESC
         LIMIT %s
         """,
-        (f"%{q}%", limit),
+        (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", limit),
     )
     rows = cur.fetchall()
 
