@@ -72,19 +72,39 @@ const isBankOwnedProperty = (deal) => {
 };
 
 const isSheriffSaleProperty = (deal) => Boolean(deal.is_sheriff_sale);
+const isOwnerOccupantProperty = (deal) => {
+  const propertyAddress = String(deal.address || "")
+    .toLowerCase()
+    .trim();
+  const mailingAddress = [deal.mail_address_1, deal.mail_address_2, deal.mail_address_3]
+    .filter((line) => line && String(line).trim())
+    .join(" ")
+    .toLowerCase()
+    .trim();
+
+  if (!propertyAddress || !mailingAddress) return false;
+
+  return (
+    mailingAddress.includes(propertyAddress) ||
+    propertyAddress.includes(mailingAddress)
+  );
+};
 const matchesStatusFilters = ({
   deal,
   distressedOnly,
   bankOwnedOnly,
   sheriffSaleOnly,
+  ownerOccupantOnly,
 }) => {
   const selectedFilters = [
     distressedOnly && isDistressedProperty(deal),
     bankOwnedOnly && isBankOwnedProperty(deal),
     sheriffSaleOnly && isSheriffSaleProperty(deal),
+    ownerOccupantOnly && isOwnerOccupantProperty(deal),
   ];
 
-  const anyFilterSelected = distressedOnly || bankOwnedOnly || sheriffSaleOnly;
+  const anyFilterSelected =
+    distressedOnly || bankOwnedOnly || sheriffSaleOnly || ownerOccupantOnly;
   return anyFilterSelected ? selectedFilters.some(Boolean) : true;
 };
 
@@ -102,6 +122,7 @@ const DealsTable = ({ deals }) => (
         <th>Deal Score</th>
         <th>Sale Type</th>
         <th>Status</th>
+        <th>Owner Occupant</th>
       </tr>
     </thead>
 
@@ -112,6 +133,7 @@ const DealsTable = ({ deals }) => (
         const isDistressed = isDistressedProperty(d);
         const isBankOwned = isBankOwnedProperty(d);
         const isSheriffSale = isSheriffSaleProperty(d);
+        const isOwnerOccupant = isOwnerOccupantProperty(d);
         const mailingAddress = [
           d.mail_address_1,
           d.mail_address_2,
@@ -157,6 +179,7 @@ const DealsTable = ({ deals }) => (
                     ? "🔥 Distressed"
                     : "—"}
             </td>
+            <td>{isOwnerOccupant ? "✅ Yes" : "—"}</td>
           </tr>
         );
       })}
@@ -173,6 +196,7 @@ export default function App() {
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
   const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
+  const [showOwnerOccupantOnly, setShowOwnerOccupantOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -186,6 +210,7 @@ export default function App() {
     distressedOnly = false,
     bankOwnedOnly = false,
     sheriffSaleOnly = false,
+    ownerOccupantOnly = false,
     pageNumber = 1,
   } = {}) => {
     setLoading(true);
@@ -218,6 +243,7 @@ export default function App() {
               distressedOnly,
               bankOwnedOnly,
               sheriffSaleOnly,
+              ownerOccupantOnly,
             });
           }),
         );
@@ -236,6 +262,7 @@ export default function App() {
         distressedOnly: showDistressedOnly,
         bankOwnedOnly: showBankOwnedOnly,
         sheriffSaleOnly: showSheriffSaleOnly,
+        ownerOccupantOnly: showOwnerOccupantOnly,
         pageNumber: 1,
       });
     }
@@ -256,6 +283,7 @@ export default function App() {
               distressedOnly: showDistressedOnly,
               bankOwnedOnly: showBankOwnedOnly,
               sheriffSaleOnly: showSheriffSaleOnly,
+              ownerOccupantOnly: showOwnerOccupantOnly,
             });
           }),
         );
@@ -281,6 +309,7 @@ export default function App() {
       distressedOnly: showDistressedOnly,
       bankOwnedOnly: showBankOwnedOnly,
       sheriffSaleOnly: showSheriffSaleOnly,
+      ownerOccupantOnly: showOwnerOccupantOnly,
       pageNumber: 1,
     });
   };
@@ -291,6 +320,7 @@ export default function App() {
       distressedOnly: showDistressedOnly,
       bankOwnedOnly: showBankOwnedOnly,
       sheriffSaleOnly: showSheriffSaleOnly,
+      ownerOccupantOnly: showOwnerOccupantOnly,
       pageNumber: page + 1,
     });
   };
@@ -301,6 +331,7 @@ export default function App() {
       distressedOnly: showDistressedOnly,
       bankOwnedOnly: showBankOwnedOnly,
       sheriffSaleOnly: showSheriffSaleOnly,
+      ownerOccupantOnly: showOwnerOccupantOnly,
       pageNumber: page - 1,
     });
   };
@@ -359,6 +390,15 @@ export default function App() {
             onChange={(e) => setShowSheriffSaleOnly(e.target.checked)}
           />
           Sheriff sale only
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={showOwnerOccupantOnly}
+            onChange={(e) => setShowOwnerOccupantOnly(e.target.checked)}
+          />
+          Owner occupant only
         </label>
 
         <button onClick={applyFilters}>Apply Filters</button>
