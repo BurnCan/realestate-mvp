@@ -108,6 +108,15 @@ const matchesStatusFilters = ({
   return anyFilterSelected ? selectedFilters.some(Boolean) : true;
 };
 
+const matchesYearBuiltRange = ({ deal, minYearBuilt, maxYearBuilt }) => {
+  if (!minYearBuilt && !maxYearBuilt) return true;
+  const yearBuilt = Number(deal.year_built);
+  if (!Number.isFinite(yearBuilt)) return false;
+  if (minYearBuilt && yearBuilt < minYearBuilt) return false;
+  if (maxYearBuilt && yearBuilt > maxYearBuilt) return false;
+  return true;
+};
+
 const DealsTable = ({ deals }) => (
   <table width="100%" border="1" cellPadding="8">
     <thead>
@@ -194,6 +203,8 @@ export default function App() {
   const [muni, setMuni] = useState("");
   const [minScore, setMinScore] = useState(0);
   const [search, setSearch] = useState("");
+  const [minYearBuilt, setMinYearBuilt] = useState("");
+  const [maxYearBuilt, setMaxYearBuilt] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
@@ -217,12 +228,16 @@ export default function App() {
   } = {}) => {
     setLoading(true);
     setIsSearchMode(false);
+    const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
+    const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
 
     axios
       .get(`${API}/deals`, {
         params: {
           muni: muni || undefined,
           min_score: minScore || 0,
+          min_year_built: parsedMinYearBuilt,
+          max_year_built: parsedMaxYearBuilt,
           distressed_only: distressedOnly || undefined,
           bank_owned_only: bankOwnedOnly || undefined,
           sheriff_sale_only: sheriffSaleOnly || undefined,
@@ -246,6 +261,10 @@ export default function App() {
               bankOwnedOnly,
               sheriffSaleOnly,
               ownerOccupantOnly,
+            }) && matchesYearBuiltRange({
+              deal,
+              minYearBuilt: parsedMinYearBuilt,
+              maxYearBuilt: parsedMaxYearBuilt,
             });
           }),
         );
@@ -271,6 +290,8 @@ export default function App() {
 
     setLoading(true);
     setIsSearchMode(true);
+    const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
+    const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
 
     axios
       .get(`${API}/search`, {
@@ -286,6 +307,10 @@ export default function App() {
               bankOwnedOnly: showBankOwnedOnly,
               sheriffSaleOnly: showSheriffSaleOnly,
               ownerOccupantOnly: showOwnerOccupantOnly,
+            }) && matchesYearBuiltRange({
+              deal,
+              minYearBuilt: parsedMinYearBuilt,
+              maxYearBuilt: parsedMaxYearBuilt,
             });
           }),
         );
@@ -365,6 +390,20 @@ export default function App() {
           placeholder="Min Score"
           value={minScore}
           onChange={(e) => setMinScore(Number(e.target.value))}
+        />
+
+        <input
+          type="number"
+          placeholder="Min Year Built"
+          value={minYearBuilt}
+          onChange={(e) => setMinYearBuilt(e.target.value)}
+        />
+
+        <input
+          type="number"
+          placeholder="Max Year Built"
+          value={maxYearBuilt}
+          onChange={(e) => setMaxYearBuilt(e.target.value)}
         />
 
         <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
