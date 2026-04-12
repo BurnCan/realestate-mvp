@@ -115,6 +115,7 @@ const DealsTable = ({ deals }) => (
         <th>Parcel ID</th>
         <th>Address</th>
         <th>Municipality</th>
+        <th>Year Built</th>
         <th>Owner 1</th>
         <th>Owner 2</th>
         <th>Mailing Address</th>
@@ -158,6 +159,7 @@ const DealsTable = ({ deals }) => (
             <td>{d.parcel_id}</td>
             <td>{d.address}</td>
             <td>{formatMuni(d.muni)}</td>
+            <td>{d.year_built || "—"}</td>
             <td>{d.owners_name_1 || "—"}</td>
             <td>{d.owners_name_2 || "—"}</td>
             <td>{mailingAddress || "—"}</td>
