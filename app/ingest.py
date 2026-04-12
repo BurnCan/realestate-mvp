@@ -6,6 +6,87 @@ from parser import parse
 URL = "https://gis.northamptoncounty.org/arcgisweb/rest/services/Assessment_Services/Land_Records_LGM/MapServer/0/query"
 LIMIT = 500
 
+UPSERT_COLUMNS = [
+    "parcel_id",
+    "address",
+    "muni",
+    "neighborhood",
+    "assessed_value",
+    "total_assessed_value",
+    "owners_hidename",
+    "owners_name_1",
+    "owners_name_2",
+    "mail_address_1",
+    "mail_address_2",
+    "mail_address_3",
+    "land_value",
+    "building_value",
+    "sale_price",
+    "sale_date",
+    "sale_type",
+    "sale_validity_code",
+    "sqft_living_area",
+    "bedrooms",
+    "bathrooms",
+    "half_baths",
+    "stories",
+    "year_built",
+    "objectid",
+    "cama_id",
+    "map",
+    "block",
+    "lot",
+    "schdist",
+    "flag",
+    "gis_acreage",
+    "asmt_acreage",
+    "deed",
+    "luc",
+    "total_value",
+    "bldg_value",
+    "building_assessment",
+    "land_assessment",
+    "note_3_gis_code",
+    "flag_1_319_515",
+    "flag_2_lerta",
+    "flag_3_hmstd",
+    "flag_4_fmstd",
+    "flag_5_act_43",
+    "flag_6_act_66",
+    "flag_7_act_149",
+    "flag_9_bill",
+    "flag_10_koz",
+    "number_of_cards",
+    "number_of_stories",
+    "exterior",
+    "basement",
+    "building_style",
+    "number_of_bedrooms",
+    "number_of_baths",
+    "number_half_baths",
+    "total_rooms",
+    "swimming_pool",
+    "comm_cards",
+    "commercial_structure_type",
+    "improvement_name",
+    "com_year_built",
+    "res_year_built",
+    "notecd1",
+    "shape_st_area",
+    "shape_st_length",
+]
+
+UPDATE_COLUMNS = [c for c in UPSERT_COLUMNS if c != "parcel_id"]
+
+INSERT_SQL = f"""
+    INSERT INTO properties ({', '.join(UPSERT_COLUMNS)})
+    VALUES ({', '.join(['%s'] * len(UPSERT_COLUMNS))})
+    ON CONFLICT (parcel_id)
+    DO UPDATE SET
+        {', '.join(f'{col} = EXCLUDED.{col}' for col in UPDATE_COLUMNS)},
+        updated_at = NOW()
+"""
+
 
 def fetch(offset):
     params = {
@@ -22,71 +103,7 @@ def fetch(offset):
 
 
 def upsert(cur, p):
-    cur.execute(
-        """
-        INSERT INTO properties (
-            parcel_id, address,
-            muni, neighborhood,
-            assessed_value, total_assessed_value, owners_hidename, owners_name_1, owners_name_2,
-            mail_address_1, mail_address_2, mail_address_3, land_value, building_value,
-            sale_price, sale_date, sale_type, sale_validity_code,
-            sqft_living_area, bedrooms, bathrooms, half_baths, stories, year_built
-        )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT (parcel_id)
-        DO UPDATE SET
-            address = EXCLUDED.address,
-            muni = EXCLUDED.muni,
-            neighborhood = EXCLUDED.neighborhood,
-            assessed_value = EXCLUDED.assessed_value,
-            total_assessed_value = EXCLUDED.total_assessed_value,
-            owners_hidename = EXCLUDED.owners_hidename,
-            owners_name_1 = EXCLUDED.owners_name_1,
-            owners_name_2 = EXCLUDED.owners_name_2,
-            mail_address_1 = EXCLUDED.mail_address_1,
-            mail_address_2 = EXCLUDED.mail_address_2,
-            mail_address_3 = EXCLUDED.mail_address_3,
-            land_value = EXCLUDED.land_value,
-            building_value = EXCLUDED.building_value,
-            sale_price = EXCLUDED.sale_price,
-            sale_date = EXCLUDED.sale_date,
-            sqft_living_area = EXCLUDED.sqft_living_area,
-            bedrooms = EXCLUDED.bedrooms,
-            bathrooms = EXCLUDED.bathrooms,
-            year_built = EXCLUDED.year_built,
-            sale_type = EXCLUDED.sale_type,
-            sale_validity_code = EXCLUDED.sale_validity_code,
-            half_baths = EXCLUDED.half_baths,
-            stories = EXCLUDED.stories,
-            updated_at = NOW()
-        """,
-        (
-            p["parcel_id"],
-            p["address"],
-            p["muni"],
-            p["neighborhood"],
-            p["assessed_value"],
-            p["total_assessed_value"],
-            p["owners_hidename"],
-            p["owners_name_1"],
-            p["owners_name_2"],
-            p["mail_address_1"],
-            p["mail_address_2"],
-            p["mail_address_3"],
-            p["land_value"],
-            p["building_value"],
-            p["sale_price"],
-            p["sale_date"],
-            p["sale_type"],
-            p["sale_validity_code"],
-            p["sqft"],
-            p["bedrooms"],
-            p["bathrooms"],
-            p["half_baths"],
-            p["stories"],
-            p["year_built"],
-        ),
-    )
+    cur.execute(INSERT_SQL, tuple(p.get(col) for col in UPSERT_COLUMNS))
 
 
 def run():
