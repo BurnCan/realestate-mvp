@@ -18,6 +18,7 @@ REQUIRED_PROPERTY_COLUMNS = {
     "owners_hidename": "TEXT",
     "owners_name_1": "TEXT",
     "owners_name_2": "TEXT",
+    "ownership_change_date": "DATE",
     "mail_address_1": "TEXT",
     "mail_address_2": "TEXT",
     "mail_address_3": "TEXT",

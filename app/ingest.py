@@ -84,6 +84,13 @@ INSERT_SQL = f"""
     ON CONFLICT (parcel_id)
     DO UPDATE SET
         {', '.join(f'{col} = EXCLUDED.{col}' for col in UPDATE_COLUMNS)},
+        ownership_change_date = CASE
+            WHEN
+                COALESCE(properties.owners_name_1, '') IS DISTINCT FROM COALESCE(EXCLUDED.owners_name_1, '')
+                OR COALESCE(properties.owners_name_2, '') IS DISTINCT FROM COALESCE(EXCLUDED.owners_name_2, '')
+            THEN CURRENT_DATE
+            ELSE properties.ownership_change_date
+        END,
         updated_at = NOW()
 """
 
