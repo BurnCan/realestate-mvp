@@ -23,6 +23,18 @@ def _normalize_address(value: str | None) -> str:
     return re.sub(r"[^a-z0-9 ]", "", text)
 
 
+def _muni_filter_candidates(muni: str | None) -> list[str]:
+    raw = (muni or "").strip()
+    if not raw:
+        return []
+    if not raw.isdigit():
+        return [raw]
+
+    numeric = str(int(raw))
+    padded = numeric.zfill(2)
+    return sorted({raw, numeric, padded})
+
+
 @lru_cache(maxsize=1)
 def get_sheriff_sale_matches() -> set[str]:
     csv_files = sorted(Path(".").glob("*.csv"), reverse=True)
@@ -105,9 +117,14 @@ def get_deals(
 
     params = []
 
-    if muni:
-        base_query += " AND muni = %s"
-        params.append(muni)
+    muni_candidates = _muni_filter_candidates(muni)
+    if muni_candidates:
+        if len(muni_candidates) == 1:
+            base_query += " AND TRIM(COALESCE(muni, '')) = %s"
+            params.append(muni_candidates[0])
+        else:
+            base_query += " AND TRIM(COALESCE(muni, '')) = ANY(%s)"
+            params.append(muni_candidates)
 
     if min_score is not None:
         base_query += " AND deal_score >= %s"

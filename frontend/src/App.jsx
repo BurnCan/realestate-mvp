@@ -57,6 +57,18 @@ const formatMuni = (muniCode) => {
   return label || raw;
 };
 
+const normalizeMuniCode = (muniCode) => {
+  const raw = String(muniCode || "").trim();
+  if (!raw) return "";
+  if (!/^\d+$/.test(raw)) return raw.toLowerCase();
+  return String(Number.parseInt(raw, 10));
+};
+
+const matchesMunicipality = (deal, selectedMuni) => {
+  if (!selectedMuni) return true;
+  return normalizeMuniCode(deal.muni) === normalizeMuniCode(selectedMuni);
+};
+
 const isDistressedProperty = (deal) => {
   const owner1 = (deal.owners_name_1 || "").toLowerCase();
   const owner2 = (deal.owners_name_2 || "").toLowerCase();
@@ -307,7 +319,7 @@ export default function App() {
               bankOwnedOnly: showBankOwnedOnly,
               sheriffSaleOnly: showSheriffSaleOnly,
               ownerOccupantOnly: showOwnerOccupantOnly,
-            }) && matchesYearBuiltRange({
+            }) && matchesMunicipality(deal, muni) && (deal.deal_score ?? 0) >= minScore && matchesYearBuiltRange({
               deal,
               minYearBuilt: parsedMinYearBuilt,
               maxYearBuilt: parsedMaxYearBuilt,
