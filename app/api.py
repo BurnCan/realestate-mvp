@@ -71,6 +71,8 @@ app.add_middleware(
 def get_deals(
     muni: str | None = None,
     min_score: float = 0,
+    min_year_built: int | None = None,
+    max_year_built: int | None = None,
     limit: int = 50,
     page: int = 1,
     distressed_only: bool = False,
@@ -110,6 +112,14 @@ def get_deals(
     if min_score is not None:
         base_query += " AND deal_score >= %s"
         params.append(min_score)
+
+    if min_year_built is not None:
+        base_query += " AND year_built >= %s"
+        params.append(min_year_built)
+
+    if max_year_built is not None:
+        base_query += " AND year_built <= %s"
+        params.append(max_year_built)
 
     distressed_condition = """
         (
