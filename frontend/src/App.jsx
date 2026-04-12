@@ -64,6 +64,13 @@ const normalizeMuniCode = (muniCode) => {
   return String(Number.parseInt(raw, 10));
 };
 
+const formatOwnershipChangeDate = (value) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+};
+
 const matchesMunicipality = (deal, selectedMuni) => {
   if (!selectedMuni) return true;
   return normalizeMuniCode(deal.muni) === normalizeMuniCode(selectedMuni);
@@ -139,6 +146,7 @@ const DealsTable = ({ deals }) => (
         <th>Year Built</th>
         <th>Owner 1</th>
         <th>Owner 2</th>
+        <th>Ownership Change Date</th>
         <th>Mailing Address</th>
         <th>Total Assessed Value</th>
         <th>Deal Score</th>
@@ -183,6 +191,7 @@ const DealsTable = ({ deals }) => (
             <td>{d.year_built || "—"}</td>
             <td>{d.owners_name_1 || "—"}</td>
             <td>{d.owners_name_2 || "—"}</td>
+            <td>{formatOwnershipChangeDate(d.ownership_change_date)}</td>
             <td>{mailingAddress || "—"}</td>
             <td>
               {totalAssessedValue != null
