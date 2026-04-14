@@ -71,3 +71,13 @@ CREATE TABLE properties (
     deal_score NUMERIC,
     updated_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE divorce_cases (
+    id SERIAL PRIMARY KEY,
+    case_number TEXT UNIQUE,
+    case_participants TEXT,
+    case_category TEXT,
+    date_opened DATE,
+    status TEXT,
+    updated_at TIMESTAMP DEFAULT NOW()
+);

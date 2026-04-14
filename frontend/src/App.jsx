@@ -219,6 +219,31 @@ const DealsTable = ({ deals }) => (
   </table>
 );
 
+const DivorceCasesTable = ({ cases }) => (
+  <table width="100%" border="1" cellPadding="8">
+    <thead>
+      <tr>
+        <th>Case Number</th>
+        <th>Participants</th>
+        <th>Category</th>
+        <th>Date Opened</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {cases.map((c) => (
+        <tr key={c.case_number}>
+          <td>{c.case_number || "—"}</td>
+          <td>{c.case_participants || "—"}</td>
+          <td>{c.case_category || "—"}</td>
+          <td>{formatOwnershipChangeDate(c.date_opened)}</td>
+          <td>{c.status || "—"}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
 export default function App() {
   const [deals, setDeals] = useState([]);
   const [muni, setMuni] = useState("");
@@ -240,6 +265,14 @@ export default function App() {
     total_pages: 1,
   });
   const [isSearchMode, setIsSearchMode] = useState(false);
+  const [divorceCases, setDivorceCases] = useState([]);
+  const [divorceLoading, setDivorceLoading] = useState(false);
+  const [divorcePagination, setDivorcePagination] = useState({
+    page: 1,
+    limit: 100,
+    total: 0,
+    total_pages: 1,
+  });
 
   const fetchDeals = ({
     distressedOnly = false,
@@ -351,6 +384,33 @@ export default function App() {
 
   useEffect(() => {
     fetchDeals();
+  }, []);
+
+  const fetchDivorceCases = (pageNumber = 1) => {
+    setDivorceLoading(true);
+    axios
+      .get(`${API}/divorce-cases`, {
+        params: {
+          limit: 100,
+          page: pageNumber,
+        },
+      })
+      .then((res) => {
+        setDivorceCases(res.data.results || []);
+        setDivorcePagination(
+          res.data.pagination || {
+            page: pageNumber,
+            limit: 100,
+            total: (res.data.results || []).length,
+            total_pages: 1,
+          },
+        );
+      })
+      .finally(() => setDivorceLoading(false));
+  };
+
+  useEffect(() => {
+    fetchDivorceCases();
   }, []);
 
   const applyFilters = () => {
@@ -497,6 +557,28 @@ export default function App() {
         </div>
       )}
       <DealsTable deals={deals} />
+
+      <h1 style={{ marginTop: 32 }}>⚖️ Divorce Cases Dashboard</h1>
+      {divorceLoading && <p>Loading divorce cases...</p>}
+      <p>
+        Showing page {divorcePagination.page} of {Math.max(divorcePagination.total_pages, 1)} (
+        {divorcePagination.total.toLocaleString()} total cases)
+      </p>
+      <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+        <button
+          onClick={() => fetchDivorceCases(divorcePagination.page - 1)}
+          disabled={divorcePagination.page <= 1}
+        >
+          ← Previous
+        </button>
+        <button
+          onClick={() => fetchDivorceCases(divorcePagination.page + 1)}
+          disabled={divorcePagination.page >= divorcePagination.total_pages}
+        >
+          Next →
+        </button>
+      </div>
+      <DivorceCasesTable cases={divorceCases} />
     </div>
   );
 }

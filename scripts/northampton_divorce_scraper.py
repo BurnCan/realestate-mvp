@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 
 from playwright.sync_api import sync_playwright
 
+from app.db import ensure_divorce_schema, get_conn
+
 URL = "https://web.northamptoncounty.org/CountySuite.EServices/CaseSearch"
 
 
@@ -36,7 +38,94 @@ def enter_date(page, selector, date_value):
 def read_results_page(page):
     rows = page.locator("table tbody tr")
     row_count = rows.count()
-    return [rows.nth(i).inner_text() for i in range(row_count)]
+    page_results = []
+
+    for i in range(row_count):
+        cells = rows.nth(i).locator("td")
+        cell_count = cells.count()
+        values = [cells.nth(j).inner_text().strip() for j in range(cell_count)]
+        values = [value for value in values if value]
+
+        if len(values) < 5:
+            fallback_values = [
+                token.strip()
+                for token in rows.nth(i).inner_text().split("\n")
+                if token.strip()
+            ]
+            values = fallback_values
+
+        if len(values) >= 5:
+            page_results.append(
+                {
+                    "case_number": values[0],
+                    "case_participants": values[1],
+                    "case_category": values[2],
+                    "date_opened": values[3],
+                    "status": values[4],
+                }
+            )
+
+    return page_results
+
+
+def parse_date(date_str):
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(date_str.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def save_cases_to_db(cases):
+    if not cases:
+        return 0
+
+    conn = get_conn()
+    ensure_divorce_schema(conn)
+    cur = conn.cursor()
+
+    upsert_query = """
+        INSERT INTO divorce_cases (
+            case_number,
+            case_participants,
+            case_category,
+            date_opened,
+            status,
+            updated_at
+        )
+        VALUES (%s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (case_number)
+        DO UPDATE SET
+            case_participants = EXCLUDED.case_participants,
+            case_category = EXCLUDED.case_category,
+            date_opened = EXCLUDED.date_opened,
+            status = EXCLUDED.status,
+            updated_at = NOW()
+    """
+
+    inserted_count = 0
+    for case in cases:
+        case_number = case.get("case_number", "").strip()
+        if not case_number:
+            continue
+
+        cur.execute(
+            upsert_query,
+            (
+                case_number,
+                case.get("case_participants"),
+                case.get("case_category"),
+                parse_date(case.get("date_opened", "")),
+                case.get("status"),
+            ),
+        )
+        inserted_count += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    return inserted_count
 
 
 # -------------------------------------------------
@@ -181,10 +270,16 @@ def run():
 
         while True:
             page_rows = read_results_page(page)
-            for row_text in page_rows:
-                if row_text not in seen_rows:
-                    seen_rows.add(row_text)
-                    cached_results.append(row_text)
+            for row_data in page_rows:
+                key = (
+                    row_data["case_number"],
+                    row_data["case_participants"],
+                    row_data["date_opened"],
+                    row_data["status"],
+                )
+                if key not in seen_rows:
+                    seen_rows.add(key)
+                    cached_results.append(row_data)
 
             if total_entries is not None and len(cached_results) >= total_entries:
                 break
@@ -212,9 +307,11 @@ def run():
 
         if cached_results:
             print(f"\nFound {len(cached_results)} divorce case(s)\n")
-            for row_text in cached_results:
-                print(row_text)
+            for row_data in cached_results:
+                print(row_data)
                 print("-" * 60)
+            saved_count = save_cases_to_db(cached_results)
+            print(f"Upserted {saved_count} case(s) into divorce_cases table.")
         else:
             no_cases = page.locator("text=No cases found")
             if no_cases.count() > 0:

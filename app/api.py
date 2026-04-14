@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .db import ensure_properties_schema, get_conn
+from .db import ensure_divorce_schema, ensure_properties_schema, get_conn
 
 app = FastAPI()
 
@@ -370,4 +370,65 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
             }
             for r in rows
         ]
+    }
+
+
+@app.get("/divorce-cases")
+def get_divorce_cases(
+    status: str | None = None,
+    limit: int = 100,
+    page: int = 1,
+):
+    conn = get_conn()
+    ensure_divorce_schema(conn)
+    cur = conn.cursor()
+
+    base_query = """
+        SELECT
+            case_number,
+            case_participants,
+            case_category,
+            date_opened,
+            status
+        FROM divorce_cases
+        WHERE 1 = 1
+    """
+    params: list[str] = []
+
+    if status:
+        base_query += " AND LOWER(COALESCE(status, '')) = LOWER(%s)"
+        params.append(status)
+
+    page = max(page, 1)
+    limit = max(limit, 1)
+    offset = (page - 1) * limit
+
+    count_query = f"SELECT COUNT(*) FROM ({base_query}) AS filtered_cases"
+    cur.execute(count_query, params)
+    total = cur.fetchone()[0]
+
+    query = f"{base_query} ORDER BY date_opened DESC NULLS LAST, case_number ASC LIMIT %s OFFSET %s"
+    cur.execute(query, [*params, limit, offset])
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return {
+        "results": [
+            {
+                "case_number": r[0],
+                "case_participants": r[1],
+                "case_category": r[2],
+                "date_opened": r[3],
+                "status": r[4],
+            }
+            for r in rows
+        ],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": (total + limit - 1) // limit,
+        },
     }
