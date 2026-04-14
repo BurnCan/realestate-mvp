@@ -82,6 +82,15 @@ REQUIRED_PROPERTY_COLUMNS = {
     "shape_st_length": "NUMERIC",
 }
 
+REQUIRED_DIVORCE_COLUMNS = {
+    "case_number": "TEXT UNIQUE",
+    "case_participants": "TEXT",
+    "case_category": "TEXT",
+    "date_opened": "DATE",
+    "status": "TEXT",
+    "updated_at": "TIMESTAMP DEFAULT NOW()",
+}
+
 
 def get_conn():
     return psycopg2.connect(**DB_CONFIG)
@@ -108,6 +117,42 @@ def ensure_properties_schema(conn):
         cur.execute(
             f"ALTER TABLE properties ADD COLUMN IF NOT EXISTS {column} {column_type}"
         )
+
+    conn.commit()
+    cur.close()
+
+
+def ensure_divorce_schema(conn):
+    """Create and backfill the divorce_cases table required by scraper and API."""
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS divorce_cases (
+            id SERIAL PRIMARY KEY,
+            case_number TEXT UNIQUE,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+    for column, column_type in REQUIRED_DIVORCE_COLUMNS.items():
+        cur.execute(
+            f"ALTER TABLE divorce_cases ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
+
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_divorce_cases_date_opened
+            ON divorce_cases (date_opened DESC)
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_divorce_cases_status
+            ON divorce_cases (status)
+        """
+    )
 
     conn.commit()
     cur.close()
