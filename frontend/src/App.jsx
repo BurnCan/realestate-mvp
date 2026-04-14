@@ -244,7 +244,24 @@ const DivorceCasesTable = ({ cases }) => (
   </table>
 );
 
-export default function App() {
+const Navigation = ({ currentPath, navigate }) => (
+  <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+    <button
+      onClick={() => navigate("/")}
+      style={{ fontWeight: currentPath === "/" ? "bold" : "normal" }}
+    >
+      Real Estate Dashboard
+    </button>
+    <button
+      onClick={() => navigate("/divorces")}
+      style={{ fontWeight: currentPath === "/divorces" ? "bold" : "normal" }}
+    >
+      Divorce Cases
+    </button>
+  </div>
+);
+
+const DealsDashboard = () => {
   const [deals, setDeals] = useState([]);
   const [muni, setMuni] = useState("");
   const [minScore, setMinScore] = useState(0);
@@ -265,15 +282,6 @@ export default function App() {
     total_pages: 1,
   });
   const [isSearchMode, setIsSearchMode] = useState(false);
-  const [divorceCases, setDivorceCases] = useState([]);
-  const [divorceLoading, setDivorceLoading] = useState(false);
-  const [divorcePagination, setDivorcePagination] = useState({
-    page: 1,
-    limit: 100,
-    total: 0,
-    total_pages: 1,
-  });
-
   const fetchDeals = ({
     distressedOnly = false,
     bankOwnedOnly = false,
@@ -384,33 +392,6 @@ export default function App() {
 
   useEffect(() => {
     fetchDeals();
-  }, []);
-
-  const fetchDivorceCases = (pageNumber = 1) => {
-    setDivorceLoading(true);
-    axios
-      .get(`${API}/divorce-cases`, {
-        params: {
-          limit: 100,
-          page: pageNumber,
-        },
-      })
-      .then((res) => {
-        setDivorceCases(res.data.results || []);
-        setDivorcePagination(
-          res.data.pagination || {
-            page: pageNumber,
-            limit: 100,
-            total: (res.data.results || []).length,
-            total_pages: 1,
-          },
-        );
-      })
-      .finally(() => setDivorceLoading(false));
-  };
-
-  useEffect(() => {
-    fetchDivorceCases();
   }, []);
 
   const applyFilters = () => {
@@ -557,8 +538,50 @@ export default function App() {
         </div>
       )}
       <DealsTable deals={deals} />
+    </div>
+  );
+};
 
-      <h1 style={{ marginTop: 32 }}>⚖️ Divorce Cases Dashboard</h1>
+const DivorceDashboard = () => {
+  const [divorceCases, setDivorceCases] = useState([]);
+  const [divorceLoading, setDivorceLoading] = useState(false);
+  const [divorcePagination, setDivorcePagination] = useState({
+    page: 1,
+    limit: 100,
+    total: 0,
+    total_pages: 1,
+  });
+
+  const fetchDivorceCases = (pageNumber = 1) => {
+    setDivorceLoading(true);
+    axios
+      .get(`${API}/divorce-cases`, {
+        params: {
+          limit: 100,
+          page: pageNumber,
+        },
+      })
+      .then((res) => {
+        setDivorceCases(res.data.results || []);
+        setDivorcePagination(
+          res.data.pagination || {
+            page: pageNumber,
+            limit: 100,
+            total: (res.data.results || []).length,
+            total_pages: 1,
+          },
+        );
+      })
+      .finally(() => setDivorceLoading(false));
+  };
+
+  useEffect(() => {
+    fetchDivorceCases();
+  }, []);
+
+  return (
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
+      <h1>⚖️ Divorce Cases Dashboard</h1>
       {divorceLoading && <p>Loading divorce cases...</p>}
       <p>
         Showing page {divorcePagination.page} of {Math.max(divorcePagination.total_pages, 1)} (
@@ -580,5 +603,34 @@ export default function App() {
       </div>
       <DivorceCasesTable cases={divorceCases} />
     </div>
+  );
+};
+
+const getCurrentPath = () => {
+  const path = window.location.pathname || "/";
+  if (path === "/divorces") return "/divorces";
+  return "/";
+};
+
+export default function App() {
+  const [currentPath, setCurrentPath] = useState(getCurrentPath);
+
+  useEffect(() => {
+    const onPopState = () => setCurrentPath(getCurrentPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  const navigate = (path) => {
+    if (path === currentPath) return;
+    window.history.pushState({}, "", path);
+    setCurrentPath(path);
+  };
+
+  return (
+    <>
+      <Navigation currentPath={currentPath} navigate={navigate} />
+      {currentPath === "/divorces" ? <DivorceDashboard /> : <DealsDashboard />}
+    </>
   );
 }
