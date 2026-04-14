@@ -42,6 +42,19 @@ def enter_date(page, selector, date_value):
 
 # -------------------------------------------------
 def read_results_page(page):
+    header_cells = page.locator("table thead th")
+    header_map = {}
+    for i in range(header_cells.count()):
+        label = header_cells.nth(i).inner_text().strip().lower()
+        if label:
+            header_map[label] = i
+
+    case_number_idx = header_map.get("case number", 0)
+    participants_idx = header_map.get("case participants", 1)
+    category_idx = header_map.get("case category", 2)
+    opened_idx = header_map.get("opened", 3)
+    status_idx = header_map.get("status", 4)
+
     rows = page.locator("table tbody tr")
     row_count = rows.count()
     page_results = []
@@ -50,9 +63,10 @@ def read_results_page(page):
         cells = rows.nth(i).locator("td")
         cell_count = cells.count()
         values = [cells.nth(j).inner_text().strip() for j in range(cell_count)]
-        values = [value for value in values if value]
 
-        if len(values) < 5:
+        if len(values) <= max(
+            case_number_idx, participants_idx, category_idx, opened_idx, status_idx
+        ):
             fallback_values = [
                 token.strip()
                 for token in rows.nth(i).inner_text().split("\n")
@@ -63,11 +77,11 @@ def read_results_page(page):
         if len(values) >= 5:
             page_results.append(
                 {
-                    "case_number": values[0],
-                    "case_participants": values[1],
-                    "case_category": values[2],
-                    "date_opened": values[3],
-                    "status": values[4],
+                    "case_number": values[case_number_idx],
+                    "case_participants": values[participants_idx],
+                    "case_category": values[category_idx],
+                    "date_opened": values[opened_idx],
+                    "status": values[status_idx],
                 }
             )
 
@@ -75,6 +89,10 @@ def read_results_page(page):
 
 
 def parse_date(date_str):
+    match = re.search(r"\b\d{1,2}/\d{1,2}/\d{4}\b", date_str or "")
+    if match:
+        date_str = match.group(0)
+
     for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(date_str.strip(), fmt).date()
