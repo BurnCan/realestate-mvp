@@ -113,11 +113,20 @@ def run():
 
             # Switch paginator page size from 10 -> 100 before reading rows.
             try:
-                page_size_select = page.locator(
-                    "select.k-pager-sizes, .k-pager-sizes select"
+                page_size_label = page.locator(
+                    ".p-paginator .p-dropdown .p-dropdown-label"
                 ).first
-                page_size_select.wait_for(state="visible", timeout=10000)
-                page_size_select.select_option("100")
+                page_size_label.wait_for(state="visible", timeout=10000)
+
+                current_page_size = page_size_label.inner_text().strip()
+                if current_page_size != "100":
+                    page_size_label.click()
+                    page.locator(
+                        ".p-dropdown-panel .p-dropdown-items .p-dropdown-item:has-text('100')"
+                    ).first.wait_for(state="visible", timeout=10000)
+                    page.locator(
+                        ".p-dropdown-panel .p-dropdown-items .p-dropdown-item:has-text('100')"
+                    ).first.click()
 
                 # Wait for refreshed results after changing page size.
                 try:
