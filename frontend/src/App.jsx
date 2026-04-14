@@ -394,11 +394,9 @@ export default function App() {
           placeholder={
             searchMode === "address"
               ? "Search address..."
-              : searchMode === "owner_1"
-                ? "Search owner 1..."
-                : searchMode === "owner_2"
-                  ? "Search owner 2..."
-                  : "Search address or owner..."
+              : searchMode === "owner"
+                ? "Search owner..."
+                : "Search address or owner..."
           }
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -407,8 +405,7 @@ export default function App() {
         <select value={searchMode} onChange={(e) => setSearchMode(e.target.value)}>
           <option value="all">All fields</option>
           <option value="address">Address</option>
-          <option value="owner_1">Owner 1</option>
-          <option value="owner_2">Owner 2</option>
+          <option value="owner">Owner</option>
         </select>
         <button onClick={() => searchDeals(search)}>Search</button>
 
