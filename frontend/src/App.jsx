@@ -153,6 +153,9 @@ const DealsTable = ({ deals }) => (
         <th>Sale Type</th>
         <th>Status</th>
         <th>Owner Occupant</th>
+        <th>Recent Divorce</th>
+        <th>Divorce Case Status</th>
+        <th>Divorce Date Opened</th>
       </tr>
     </thead>
 
@@ -212,6 +215,9 @@ const DealsTable = ({ deals }) => (
                     : "—"}
             </td>
             <td>{isOwnerOccupant ? "✅ Yes" : "—"}</td>
+            <td>{d.recent_divorce ? "✅ Yes" : "—"}</td>
+            <td>{d.divorce_case_status || "—"}</td>
+            <td>{formatOwnershipChangeDate(d.divorce_date_opened)}</td>
           </tr>
         );
       })}
