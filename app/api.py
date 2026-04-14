@@ -23,6 +23,43 @@ def _normalize_address(value: str | None) -> str:
     return re.sub(r"[^a-z0-9 ]", "", text)
 
 
+def _normalize_owner_search_text(value: str | None) -> str:
+    text = _normalize_text(value)
+    text = re.sub(r"[^a-z0-9 ]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _build_owner_name_clause(query: str) -> tuple[str, list[str]]:
+    normalized_query = _normalize_owner_search_text(query)
+    name_tokens = [token for token in normalized_query.split(" ") if token]
+
+    # If we only have one token, keep the default ILIKE behavior.
+    if len(name_tokens) < 2:
+        return "", []
+
+    first_name = name_tokens[0]
+    last_name = name_tokens[-1]
+    owner_blob = """
+        LOWER(
+            REGEXP_REPLACE(
+                CONCAT_WS(' ', owners_name_1, owners_name_2, owners_hidename),
+                '[^a-z0-9]+',
+                ' ',
+                'g'
+            )
+        )
+    """
+
+    clause = f"""
+            OR (
+                {owner_blob} ~ %s
+                AND {owner_blob} ~ %s
+            )
+    """
+    # PostgreSQL word-boundary operators avoid partial token matches.
+    return clause, [rf"\\m{first_name}\\M", rf"\\m{last_name}\\M"]
+
+
 def _muni_filter_candidates(muni: str | None) -> list[str]:
     raw = (muni or "").strip()
     if not raw:
@@ -235,9 +272,10 @@ def search_deals(q: str, limit: int = 50):
     conn = get_conn()
     ensure_properties_schema(conn)
     cur = conn.cursor()
+    owner_name_clause, owner_name_params = _build_owner_name_clause(q)
 
     cur.execute(
-        """
+        f"""
         SELECT
             parcel_id,
             address,
@@ -261,11 +299,12 @@ def search_deals(q: str, limit: int = 50):
             OR owners_name_1 ILIKE %s
             OR owners_name_2 ILIKE %s
             OR owners_hidename ILIKE %s
+            {owner_name_clause}
           )
         ORDER BY deal_score DESC
         LIMIT %s
         """,
-        (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", limit),
+        [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", *owner_name_params, limit],
     )
     rows = cur.fetchall()
 
