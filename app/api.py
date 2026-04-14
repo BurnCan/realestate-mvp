@@ -290,6 +290,7 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
     cur = conn.cursor()
     normalized_mode = (mode or "all").strip().lower()
     owner_name_clause, owner_name_params = _build_owner_name_clause(q)
+    owner_query = _normalize_owner_search_text(q)
     where_clause = ""
     params: list[str | int] = []
 
@@ -303,7 +304,7 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
                 OR owners_name_2 ILIKE %s
             )
         """
-        params = [f"%{q}%", f"%{q}%"]
+        params = [f"%{owner_query}%", f"%{owner_query}%"]
     else:
         where_clause = f"""
             (
@@ -314,7 +315,7 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
                 {owner_name_clause}
             )
         """
-        params = [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", *owner_name_params]
+        params = [f"%{q}%", f"%{owner_query}%", f"%{owner_query}%", f"%{owner_query}%", *owner_name_params]
 
     cur.execute(
         f"""
