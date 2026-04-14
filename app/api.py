@@ -37,8 +37,24 @@ def _build_owner_name_clause(query: str) -> tuple[str, list[str]]:
     if len(name_tokens) < 2:
         return "", []
 
-    first_name = name_tokens[0]
-    last_name = name_tokens[-1]
+    normalized_with_commas = _normalize_text(query)
+    has_comma = "," in normalized_with_commas
+
+    if has_comma:
+        # Support "LAST, FIRST MIDDLE" formats by prioritizing last + first tokens.
+        before_comma, _, after_comma = normalized_with_commas.partition(",")
+        comma_last_name = _normalize_owner_search_text(before_comma).split(" ")
+        comma_given_names = _normalize_owner_search_text(after_comma).split(" ")
+
+        if comma_last_name and comma_given_names:
+            last_name = comma_last_name[0]
+            first_name = comma_given_names[0]
+        else:
+            first_name = name_tokens[0]
+            last_name = name_tokens[-1]
+    else:
+        first_name = name_tokens[0]
+        last_name = name_tokens[-1]
     owner_blob = """
         LOWER(
             REGEXP_REPLACE(
