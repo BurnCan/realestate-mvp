@@ -296,12 +296,14 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
     if normalized_mode == "address":
         where_clause = "address ILIKE %s"
         params = [f"%{q}%"]
-    elif normalized_mode == "owner_1":
-        where_clause = "owners_name_1 ILIKE %s"
-        params = [f"%{q}%"]
-    elif normalized_mode == "owner_2":
-        where_clause = "owners_name_2 ILIKE %s"
-        params = [f"%{q}%"]
+    elif normalized_mode in {"owner", "owner_1", "owner_2"}:
+        where_clause = """
+            (
+                owners_name_1 ILIKE %s
+                OR owners_name_2 ILIKE %s
+            )
+        """
+        params = [f"%{q}%", f"%{q}%"]
     else:
         where_clause = f"""
             (
