@@ -224,6 +224,7 @@ export default function App() {
   const [muni, setMuni] = useState("");
   const [minScore, setMinScore] = useState(0);
   const [search, setSearch] = useState("");
+  const [searchMode, setSearchMode] = useState("all");
   const [minYearBuilt, setMinYearBuilt] = useState("");
   const [maxYearBuilt, setMaxYearBuilt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -316,7 +317,7 @@ export default function App() {
 
     axios
       .get(`${API}/search`, {
-        params: { q: query, limit: 50 },
+        params: { q: query, mode: searchMode, limit: 50 },
       })
       .then((res) => {
         const results = res.data.results || [];
@@ -390,11 +391,25 @@ export default function App() {
 
       <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
         <input
-          placeholder="Search address or owner..."
+          placeholder={
+            searchMode === "address"
+              ? "Search address..."
+              : searchMode === "owner_1"
+                ? "Search owner 1..."
+                : searchMode === "owner_2"
+                  ? "Search owner 2..."
+                  : "Search address or owner..."
+          }
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
         />
+        <select value={searchMode} onChange={(e) => setSearchMode(e.target.value)}>
+          <option value="all">All fields</option>
+          <option value="address">Address</option>
+          <option value="owner_1">Owner 1</option>
+          <option value="owner_2">Owner 2</option>
+        </select>
         <button onClick={() => searchDeals(search)}>Search</button>
 
         <select value={muni} onChange={(e) => setMuni(e.target.value)}>
