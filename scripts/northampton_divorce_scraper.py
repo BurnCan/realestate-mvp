@@ -110,6 +110,27 @@ def run():
         response = response_info.value
         if response.ok:
             print("Search request completed successfully")
+
+            # Switch paginator page size from 10 -> 100 before reading rows.
+            try:
+                page_size_select = page.locator(
+                    "select.k-pager-sizes, .k-pager-sizes select"
+                ).first
+                page_size_select.wait_for(state="visible", timeout=10000)
+                page_size_select.select_option("100")
+
+                # Wait for refreshed results after changing page size.
+                try:
+                    loading = page.locator("div.k-loading-mask")
+                    loading.wait_for(state="visible", timeout=5000)
+                    loading.wait_for(state="hidden", timeout=30000)
+                except Exception:
+                    pass
+
+                page.wait_for_timeout(1000)
+                print("Paginator page size changed to 100")
+            except Exception as exc:
+                print(f"Could not set paginator page size to 100: {exc}")
         else:
             print(f"Search request failed with status: {response.status}")
 
