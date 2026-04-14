@@ -284,11 +284,35 @@ def get_deals(
 
 
 @app.get("/search")
-def search_deals(q: str, limit: int = 50):
+def search_deals(q: str, limit: int = 50, mode: str = "all"):
     conn = get_conn()
     ensure_properties_schema(conn)
     cur = conn.cursor()
+    normalized_mode = (mode or "all").strip().lower()
     owner_name_clause, owner_name_params = _build_owner_name_clause(q)
+    where_clause = ""
+    params: list[str | int] = []
+
+    if normalized_mode == "address":
+        where_clause = "address ILIKE %s"
+        params = [f"%{q}%"]
+    elif normalized_mode == "owner_1":
+        where_clause = "owners_name_1 ILIKE %s"
+        params = [f"%{q}%"]
+    elif normalized_mode == "owner_2":
+        where_clause = "owners_name_2 ILIKE %s"
+        params = [f"%{q}%"]
+    else:
+        where_clause = f"""
+            (
+                address ILIKE %s
+                OR owners_name_1 ILIKE %s
+                OR owners_name_2 ILIKE %s
+                OR owners_hidename ILIKE %s
+                {owner_name_clause}
+            )
+        """
+        params = [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", *owner_name_params]
 
     cur.execute(
         f"""
@@ -310,17 +334,11 @@ def search_deals(q: str, limit: int = 50):
             sale_type
         FROM properties
         WHERE deal_score IS NOT NULL
-          AND (
-            address ILIKE %s
-            OR owners_name_1 ILIKE %s
-            OR owners_name_2 ILIKE %s
-            OR owners_hidename ILIKE %s
-            {owner_name_clause}
-          )
+          AND {where_clause}
         ORDER BY deal_score DESC
         LIMIT %s
         """,
-        [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", *owner_name_params, limit],
+        [*params, limit],
     )
     rows = cur.fetchall()
 
