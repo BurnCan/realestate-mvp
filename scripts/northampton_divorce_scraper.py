@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta
 
 from playwright.sync_api import sync_playwright
@@ -29,6 +30,27 @@ def enter_date(page, selector, date_value):
     # Press Enter to commit
     field.press("Enter")
     page.wait_for_timeout(300)
+
+
+# -------------------------------------------------
+def read_results_page(page):
+    rows = page.locator("table tbody tr")
+    row_count = rows.count()
+    return [rows.nth(i).inner_text() for i in range(row_count)]
+
+
+# -------------------------------------------------
+def parse_total_entries(page):
+    paginator_current = page.locator("span.p-paginator-current").first
+    if paginator_current.count() == 0:
+        return None
+
+    text = paginator_current.inner_text().strip()
+    match = re.search(r"of\s+(\d+)\s+entries", text)
+    if not match:
+        return None
+
+    return int(match.group(1))
 
 
 # -------------------------------------------------
@@ -146,18 +168,54 @@ def run():
         page.wait_for_timeout(2000)  # short pause for DOM update
 
         # -------------------------------------------------
-        # RESULTS
+        # RESULTS (CACHE ALL PAGINATED ROWS)
         # -------------------------------------------------
-        rows = page.locator("table tbody tr")
-        row_count = rows.count()
+        cached_results = []
+        seen_rows = set()
 
-        if row_count > 0:
-            print(f"\nFound {row_count} divorce case(s)\n")
-            for i in range(row_count):
-                print(rows.nth(i).inner_text())
+        total_entries = parse_total_entries(page)
+        if total_entries is None:
+            print(
+                "Could not read total entries from paginator; defaulting to a single visible page."
+            )
+
+        while True:
+            page_rows = read_results_page(page)
+            for row_text in page_rows:
+                if row_text not in seen_rows:
+                    seen_rows.add(row_text)
+                    cached_results.append(row_text)
+
+            if total_entries is not None and len(cached_results) >= total_entries:
+                break
+
+            next_button = page.locator(
+                "button.p-paginator-next.p-paginator-element.p-link"
+            ).first
+            if next_button.count() == 0 or next_button.is_disabled():
+                break
+
+            previous_indicator = page.locator("span.p-paginator-current").first.inner_text()
+            next_button.click()
+
+            try:
+                page.wait_for_function(
+                    """(prevText) => {
+                        const el = document.querySelector('span.p-paginator-current');
+                        return el && el.textContent && el.textContent.trim() !== prevText;
+                    }""",
+                    previous_indicator.strip(),
+                    timeout=15000,
+                )
+            except Exception:
+                page.wait_for_timeout(1000)
+
+        if cached_results:
+            print(f"\nFound {len(cached_results)} divorce case(s)\n")
+            for row_text in cached_results:
+                print(row_text)
                 print("-" * 60)
         else:
-            # Check if "No cases found" is visible
             no_cases = page.locator("text=No cases found")
             if no_cases.count() > 0:
                 print("No cases found. Please update your search and try again.")
