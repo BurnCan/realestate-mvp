@@ -2,6 +2,7 @@ import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from time import perf_counter
 
 from playwright.sync_api import sync_playwright
 
@@ -140,6 +141,7 @@ def save_cases_to_db(cases):
     if not cases:
         return 0
 
+    print("Opening database connection...")
     conn = get_conn()
     ensure_divorce_schema(conn)
     ensure_properties_schema(conn)
@@ -221,24 +223,27 @@ def save_cases_to_db(cases):
         )
     """
 
-    for normalized_name in unique_normalized_names:
-        print(f"Checking property owner match for normalized owner: '{normalized_name}'")
+    print(f"Checking owner matches for {len(unique_normalized_names)} normalized name(s)...")
+    for index, normalized_name in enumerate(unique_normalized_names, start=1):
+        if index % 50 == 0:
+            print(f"Owner match progress: {index}/{len(unique_normalized_names)}")
         cur.execute(owner_match_count_query, (normalized_name, normalized_name))
         owner_match_count = cur.fetchone()[0]
-        if owner_match_count == 0:
+        if owner_match_count > 0:
             print(
-                f"No property owner match found for '{normalized_name}'. Moving to next normalized owner name."
+                f"Found {owner_match_count} matching propert{'y' if owner_match_count == 1 else 'ies'} for '{normalized_name}'."
             )
-            continue
-        print(
-            f"Found {owner_match_count} matching propert{'y' if owner_match_count == 1 else 'ies'} for '{normalized_name}'."
-        )
 
+    print("Committing divorce case upserts...")
     conn.commit()
     cur.close()
 
     # Materialize divorce fields directly onto properties so API reads avoid runtime joins.
+    print("Syncing divorce fields onto properties (this may take a while)...")
+    sync_started = perf_counter()
     sync_property_divorce_fields(conn)
+    sync_elapsed = perf_counter() - sync_started
+    print(f"Property divorce-field sync complete in {sync_elapsed:.1f}s.")
     conn.close()
     return inserted_count
 
