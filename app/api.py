@@ -1,4 +1,5 @@
 import csv
+import logging
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -6,10 +7,12 @@ from time import monotonic
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from psycopg2 import OperationalError
 
 from .db import ensure_divorce_schema, ensure_properties_schema, get_conn
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 DIVORCE_REFRESH_TTL_SECONDS = 300
 _last_divorce_refresh_monotonic = 0.0
 
@@ -272,10 +275,19 @@ def maybe_refresh_property_divorce_flags(conn) -> None:
 @app.on_event("startup")
 def prime_database_schema() -> None:
     """Apply lightweight boot-time schema checks once instead of every request."""
-    conn = get_conn()
+    try:
+        conn = get_conn()
+    except OperationalError:
+        logger.warning(
+            "Skipping startup schema checks: unable to connect to Postgres."
+        )
+        return
+
     try:
         ensure_properties_schema(conn)
         ensure_divorce_schema(conn)
+    except Exception:
+        logger.exception("Startup schema checks failed.")
     finally:
         conn.close()
 

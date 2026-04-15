@@ -1,3 +1,5 @@
+import os
+
 import psycopg2
 
 DB_CONFIG = {
@@ -6,6 +8,8 @@ DB_CONFIG = {
     "password": "password",
     "host": "localhost",
     "port": 5432,
+    # Keep startup responsive when Postgres is down or unreachable.
+    "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "3")),
 }
 
 REQUIRED_PROPERTY_COLUMNS = {
