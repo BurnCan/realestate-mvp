@@ -92,6 +92,7 @@ REQUIRED_PROPERTY_COLUMNS = {
 REQUIRED_DIVORCE_COLUMNS = {
     "case_number": "TEXT UNIQUE",
     "case_participants": "TEXT",
+    "normalized_participants": "TEXT[]",
     "case_category": "TEXT",
     "date_opened": "DATE",
     "status": "TEXT",
@@ -173,82 +174,45 @@ def sync_property_divorce_fields(conn):
     cur.execute(
         """
         CREATE TEMP TABLE temp_property_divorce_matches AS
-        WITH parsed_participants AS (
+        WITH normalized_participants AS (
             SELECT
                 dc.case_number,
                 dc.status,
                 dc.date_opened,
-                LOWER(TRIM((match_data)[2])) AS participant_raw
-            FROM divorce_cases dc,
-            REGEXP_MATCHES(
-                COALESCE(dc.case_participants, ''),
-                '(Pla|Def):\\s*([^:]+?)(?=\\s*(?:Pla|Def):|$)',
-                'g'
-            ) AS match_data
-        ),
-        normalized_participants AS (
-            SELECT
-                case_number,
-                status,
-                date_opened,
-                TRIM(
-                    CASE
-                        WHEN POSITION(',' IN participant_raw) > 0 THEN
-                            CONCAT_WS(
-                                ' ',
-                                TRIM(SPLIT_PART(participant_raw, ',', 1)),
-                                SPLIT_PART(TRIM(SPLIT_PART(participant_raw, ',', 2)), ' ', 1)
-                            )
-                        ELSE
-                            CONCAT_WS(
-                                ' ',
-                                SPLIT_PART(REGEXP_REPLACE(participant_raw, '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
-                                SPLIT_PART(REGEXP_REPLACE(participant_raw, '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
-                            )
-                    END
-                ) AS normalized_name
-            FROM parsed_participants
-        ),
-        normalized_properties AS (
-            SELECT
-                p.id,
-                TRIM(
-                    CONCAT_WS(
-                        ' ',
-                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
-                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
-                    )
-                ) AS owner_1_normalized,
-                TRIM(
-                    CONCAT_WS(
-                        ' ',
-                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
-                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
-                    )
-                ) AS owner_2_normalized
-            FROM properties p
+                LOWER(TRIM(UNNEST(COALESCE(dc.normalized_participants, ARRAY[]::TEXT[])))) AS normalized_name
+            FROM divorce_cases dc
         ),
         ranked_matches AS (
             SELECT
-                np.id AS property_id,
+                p.id AS property_id,
                 npt.status,
                 npt.date_opened,
                 ROW_NUMBER() OVER (
-                    PARTITION BY np.id
+                    PARTITION BY p.id
                     ORDER BY
                         CASE WHEN LOWER(COALESCE(npt.status, '')) = 'open' THEN 0 ELSE 1 END,
                         npt.date_opened DESC NULLS LAST,
                         npt.case_number DESC
                 ) AS rn
-            FROM normalized_properties np
-            JOIN normalized_participants npt
+            FROM normalized_participants npt
+            JOIN properties p
                 ON (
-                    np.owner_1_normalized <> ''
-                    AND np.owner_1_normalized = npt.normalized_name
+                    TRIM(
+                        CONCAT_WS(
+                            ' ',
+                            SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
+                            SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
+                        )
+                    ) = npt.normalized_name
                 )
                 OR (
-                    np.owner_2_normalized <> ''
-                    AND np.owner_2_normalized = npt.normalized_name
+                    TRIM(
+                        CONCAT_WS(
+                            ' ',
+                            SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
+                            SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
+                        )
+                    ) = npt.normalized_name
                 )
             WHERE npt.normalized_name <> ''
         )

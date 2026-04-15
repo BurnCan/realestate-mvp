@@ -106,6 +106,36 @@ def parse_date(date_str):
     return None
 
 
+def normalize_participant_name(raw_name):
+    if not raw_name:
+        return ""
+
+    normalized = re.sub(r"[^a-z0-9,\s]+", " ", raw_name.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized:
+        return ""
+
+    if "," in normalized:
+        last, _, remainder = normalized.partition(",")
+        first = remainder.strip().split(" ")[0] if remainder.strip() else ""
+        return " ".join(part for part in [last.strip(), first.strip()] if part).strip()
+
+    parts = normalized.split(" ")
+    return " ".join(parts[:2]).strip()
+
+
+def extract_normalized_participants(case_participants):
+    normalized_names = []
+    seen = set()
+    pattern = re.compile(r"(?:Pla|Def):\s*([^:]+?)(?=\s*(?:Pla|Def):|$)", re.IGNORECASE)
+    for match in pattern.finditer(case_participants or ""):
+        normalized = normalize_participant_name(match.group(1))
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            normalized_names.append(normalized)
+    return normalized_names
+
+
 def save_cases_to_db(cases):
     if not cases:
         return 0
@@ -119,15 +149,17 @@ def save_cases_to_db(cases):
         INSERT INTO divorce_cases (
             case_number,
             case_participants,
+            normalized_participants,
             case_category,
             date_opened,
             status,
             updated_at
         )
-        VALUES (%s, %s, %s, %s, %s, NOW())
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (case_number)
         DO UPDATE SET
             case_participants = EXCLUDED.case_participants,
+            normalized_participants = EXCLUDED.normalized_participants,
             case_category = EXCLUDED.case_category,
             date_opened = EXCLUDED.date_opened,
             status = EXCLUDED.status,
@@ -145,6 +177,7 @@ def save_cases_to_db(cases):
             (
                 case_number,
                 case.get("case_participants"),
+                extract_normalized_participants(case.get("case_participants", "")),
                 case.get("case_category"),
                 parse_date(case.get("date_opened", "")),
                 case.get("status"),
@@ -181,180 +214,213 @@ def run():
         browser = p.chromium.launch(headless=False, slow_mo=250)
         page = browser.new_page()
 
-        page.goto(URL)
-
-        # -------------------------------------------------
-        # ACCEPT DISCLAIMER
-        # -------------------------------------------------
         try:
-            page.wait_for_selector("text=Accept", timeout=8000)
-            print("Accepting disclaimer...")
-            page.click("text=Accept")
-            page.wait_for_load_state("networkidle")
-        except Exception:
-            pass
+            print("[1/8] Opening Northampton County case search page...")
+            page.goto(URL)
 
-        # -------------------------------------------------
-        # WAIT FOR SEARCH FORM
-        # -------------------------------------------------
-        page.wait_for_selector("text=Search Type")
-
-        # -------------------------------------------------
-        # INITIAL SEARCH STRING (required)
-        # -------------------------------------------------
-        search_input = page.get_by_label("Search String")  # Use visible label text
-        search_input.click()
-        search_input.fill("")  # clear anything
-        search_input.type(" ")  # type a single space
-        search_input.dispatch_event("input")
-        search_input.dispatch_event("change")
-        page.wait_for_timeout(500)  # give Kendo time to register
-
-        # -------------------------------------------------
-        # SEARCH TYPE
-        # -------------------------------------------------
-        page.locator("label:has-text('Search Type')").locator("..").click()
-        page.locator("li:has-text('Case Number')").click()
-
-        # -------------------------------------------------
-        # DATE RANGE
-        # -------------------------------------------------
-        today = datetime.today()
-        one_year_ago = today - timedelta(days=365)
-
-        enter_date(page, "input[placeholder='Start Date']", one_year_ago)
-        enter_date(page, "input[placeholder='End Date']", today)
-
-        # -------------------------------------------------
-        # CASE CATEGORY
-        # -------------------------------------------------
-        page.locator("label:has-text('Case Categories')").locator("..").click()
-        page.get_by_role("option", name="Divorce", exact=True).click()
-
-        # -------------------------------------------------
-        # SEARCH
-        # -------------------------------------------------
-        search_button = page.locator("button:has-text('Search')")
-
-        # Wait for the loading overlay to appear and disappear
-        try:
-            loading = page.locator("div.k-loading-mask")
-            loading.wait_for(state="visible", timeout=50000)
-            loading.wait_for(state="hidden", timeout=60000)
-            print("Loading overlay completed")
-        except Exception:
-            print("No loading overlay detected, continuing")
-
-        print("Waiting for search results...")
-
-        # Trigger search and wait for the POST request to complete
-        with page.expect_response("**/CaseSearch/Search") as response_info:
-            search_button.click()
-
-        response = response_info.value
-        if response.ok:
-            print("Search request completed successfully")
-
-            # Switch paginator page size from 10 -> 100 before reading rows.
+            # -------------------------------------------------
+            # ACCEPT DISCLAIMER
+            # -------------------------------------------------
+            print("[2/8] Checking for disclaimer dialog...")
             try:
-                page_size_label = page.locator(
-                    ".p-paginator .p-dropdown .p-dropdown-label"
-                ).first
-                page_size_label.wait_for(state="visible", timeout=10000)
+                page.wait_for_selector("text=Accept", timeout=8000)
+                print("Accepting disclaimer...")
+                page.click("text=Accept")
+                page.wait_for_load_state("networkidle")
+            except Exception:
+                print("Disclaimer accept prompt not shown; continuing.")
 
-                current_page_size = page_size_label.inner_text().strip()
-                if current_page_size != "100":
-                    page_size_label.click()
-                    page.locator(
-                        ".p-dropdown-panel .p-dropdown-items .p-dropdown-item:has-text('100')"
-                    ).first.wait_for(state="visible", timeout=10000)
-                    page.locator(
-                        ".p-dropdown-panel .p-dropdown-items .p-dropdown-item:has-text('100')"
-                    ).first.click()
+            # -------------------------------------------------
+            # WAIT FOR SEARCH FORM
+            # -------------------------------------------------
+            print("[3/8] Waiting for search form...")
+            page.wait_for_selector("text=Search Type")
 
-                # Wait for refreshed results after changing page size.
-                try:
-                    loading = page.locator("div.k-loading-mask")
-                    loading.wait_for(state="visible", timeout=5000)
-                    loading.wait_for(state="hidden", timeout=30000)
-                except Exception:
-                    pass
+            # -------------------------------------------------
+            # INITIAL SEARCH STRING (required)
+            # -------------------------------------------------
+            print("[4/8] Populating search criteria...")
+            search_input = page.get_by_label("Search String")  # Use visible label text
+            search_input.click()
+            search_input.fill("")  # clear anything
+            search_input.type(" ")  # type a single space
+            search_input.dispatch_event("input")
+            search_input.dispatch_event("change")
+            page.wait_for_timeout(500)  # give Kendo time to register
 
-                page.wait_for_timeout(1000)
-                print("Paginator page size changed to 100")
-            except Exception as exc:
-                print(f"Could not set paginator page size to 100: {exc}")
-        else:
-            print(f"Search request failed with status: {response.status}")
+            # -------------------------------------------------
+            # SEARCH TYPE
+            # -------------------------------------------------
+            page.locator("label:has-text('Search Type')").locator("..").click()
+            page.locator("li:has-text('Case Number')").click()
+            print("Search type set to 'Case Number'.")
 
-        page.wait_for_timeout(2000)  # short pause for DOM update
-
-        # -------------------------------------------------
-        # RESULTS (CACHE ALL PAGINATED ROWS)
-        # -------------------------------------------------
-        cached_results = []
-        seen_rows = set()
-
-        total_entries = parse_total_entries(page)
-        if total_entries is None:
+            # -------------------------------------------------
+            # DATE RANGE
+            # -------------------------------------------------
+            today = datetime.today()
+            one_year_ago = today - timedelta(days=365)
             print(
-                "Could not read total entries from paginator; defaulting to a single visible page."
+                f"Date range set to {one_year_ago.strftime('%m/%d/%Y')} through {today.strftime('%m/%d/%Y')}."
             )
 
-        while True:
-            page_rows = read_results_page(page)
-            for row_data in page_rows:
-                key = (
-                    row_data["case_number"],
-                    row_data["case_participants"],
-                    row_data["date_opened"],
-                    row_data["status"],
-                )
-                if key not in seen_rows:
-                    seen_rows.add(key)
-                    cached_results.append(row_data)
+            enter_date(page, "input[placeholder='Start Date']", one_year_ago)
+            enter_date(page, "input[placeholder='End Date']", today)
 
-            if total_entries is not None and len(cached_results) >= total_entries:
-                break
+            # -------------------------------------------------
+            # CASE CATEGORY
+            # -------------------------------------------------
+            page.locator("label:has-text('Case Categories')").locator("..").click()
+            page.get_by_role("option", name="Divorce", exact=True).click()
+            print("Case category set to 'Divorce'.")
 
-            next_button = page.locator(
-                "button.p-paginator-next.p-paginator-element.p-link"
-            ).first
-            if next_button.count() == 0 or next_button.is_disabled():
-                break
+            # -------------------------------------------------
+            # SEARCH
+            # -------------------------------------------------
+            print("[5/8] Running search...")
+            search_button = page.locator("button:has-text('Search')")
 
-            previous_indicator = page.locator("span.p-paginator-current").first.inner_text()
-            next_button.click()
-
+            # Wait for the loading overlay to appear and disappear
             try:
-                page.wait_for_function(
-                    """(prevText) => {
-                        const el = document.querySelector('span.p-paginator-current');
-                        return el && el.textContent && el.textContent.trim() !== prevText;
-                    }""",
-                    previous_indicator.strip(),
-                    timeout=15000,
-                )
+                loading = page.locator("div.k-loading-mask")
+                loading.wait_for(state="visible", timeout=50000)
+                loading.wait_for(state="hidden", timeout=60000)
+                print("Loading overlay completed.")
             except Exception:
-                page.wait_for_timeout(1000)
+                print("No loading overlay detected before search; continuing.")
 
-        if cached_results:
-            print(f"\nFound {len(cached_results)} divorce case(s)\n")
-            for row_data in cached_results:
-                print(row_data)
-                print("-" * 60)
-            saved_count = save_cases_to_db(cached_results)
-            print(f"Upserted {saved_count} case(s) into divorce_cases table.")
-        else:
-            no_cases = page.locator("text=No cases found")
-            if no_cases.count() > 0:
-                print("No cases found. Please update your search and try again.")
+            print("Waiting for search response...")
+
+            # Trigger search and wait for the POST request to complete
+            with page.expect_response("**/CaseSearch/Search") as response_info:
+                search_button.click()
+
+            response = response_info.value
+            if response.ok:
+                print("Search request completed successfully.")
+
+                # Switch paginator page size from 10 -> 100 before reading rows.
+                try:
+                    page_size_label = page.locator(
+                        ".p-paginator .p-dropdown .p-dropdown-label"
+                    ).first
+                    page_size_label.wait_for(state="visible", timeout=10000)
+
+                    current_page_size = page_size_label.inner_text().strip()
+                    if current_page_size != "100":
+                        page_size_label.click()
+                        page.locator(
+                            ".p-dropdown-panel .p-dropdown-items .p-dropdown-item:has-text('100')"
+                        ).first.wait_for(state="visible", timeout=10000)
+                        page.locator(
+                            ".p-dropdown-panel .p-dropdown-items .p-dropdown-item:has-text('100')"
+                        ).first.click()
+
+                    # Wait for refreshed results after changing page size.
+                    try:
+                        loading = page.locator("div.k-loading-mask")
+                        loading.wait_for(state="visible", timeout=5000)
+                        loading.wait_for(state="hidden", timeout=30000)
+                    except Exception:
+                        pass
+
+                    page.wait_for_timeout(1000)
+                    print("Paginator page size changed to 100.")
+                except Exception as exc:
+                    print(f"Could not set paginator page size to 100: {exc}")
             else:
+                print(f"Search request failed with status: {response.status}")
+
+            page.wait_for_timeout(2000)  # short pause for DOM update
+
+            # -------------------------------------------------
+            # RESULTS (CACHE ALL PAGINATED ROWS)
+            # -------------------------------------------------
+            print("[6/8] Reading paginated results...")
+            cached_results = []
+            seen_rows = set()
+            pages_processed = 0
+
+            total_entries = parse_total_entries(page)
+            if total_entries is None:
                 print(
-                    "No table rows found and 'No cases found' message not present — something went wrong."
+                    "Could not read total entries from paginator; defaulting to a single visible page."
+                )
+            else:
+                print(f"Paginator reports {total_entries} total entries.")
+
+            while True:
+                pages_processed += 1
+                page_rows = read_results_page(page)
+                print(f"Processing page {pages_processed}: found {len(page_rows)} row(s).")
+                added_this_page = 0
+                for row_data in page_rows:
+                    key = (
+                        row_data["case_number"],
+                        row_data["case_participants"],
+                        row_data["date_opened"],
+                        row_data["status"],
+                    )
+                    if key not in seen_rows:
+                        seen_rows.add(key)
+                        cached_results.append(row_data)
+                        added_this_page += 1
+
+                print(
+                    f"Page {pages_processed}: added {added_this_page} new row(s), running total {len(cached_results)}."
                 )
 
-        browser.close()
+                if total_entries is not None and len(cached_results) >= total_entries:
+                    print("Reached reported total entries; pagination complete.")
+                    break
+
+                next_button = page.locator(
+                    "button.p-paginator-next.p-paginator-element.p-link"
+                ).first
+                if next_button.count() == 0 or next_button.is_disabled():
+                    print("Next-page button not available; pagination complete.")
+                    break
+
+                previous_indicator = (
+                    page.locator("span.p-paginator-current").first.inner_text()
+                )
+                next_button.click()
+                print(f"Navigating to next page after: '{previous_indicator.strip()}'.")
+
+                try:
+                    page.wait_for_function(
+                        """(prevText) => {
+                            const el = document.querySelector('span.p-paginator-current');
+                            return el && el.textContent && el.textContent.trim() !== prevText;
+                        }""",
+                        previous_indicator.strip(),
+                        timeout=15000,
+                    )
+                    print("Next page loaded.")
+                except Exception:
+                    print("Paginator indicator did not update in time; waiting briefly.")
+                    page.wait_for_timeout(1000)
+
+            print("[7/8] Saving results...")
+            if cached_results:
+                print(f"\nFound {len(cached_results)} divorce case(s)\n")
+                for row_data in cached_results:
+                    print(row_data)
+                    print("-" * 60)
+                saved_count = save_cases_to_db(cached_results)
+                print(f"Upserted {saved_count} case(s) into divorce_cases table.")
+            else:
+                no_cases = page.locator("text=No cases found")
+                if no_cases.count() > 0:
+                    print("No cases found. Please update your search and try again.")
+                else:
+                    print(
+                        "No table rows found and 'No cases found' message not present — something went wrong."
+                    )
+        finally:
+            print("[8/8] Closing browser...")
+            browser.close()
+            print("Script complete.")
 
 
 if __name__ == "__main__":
