@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
-const API = "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API_BASE_URL || "/api";
 
 const hasBankWord = (ownerName) => /\bbank\b/.test(ownerName);
 
@@ -276,6 +276,7 @@ const DealsDashboard = () => {
   const [minYearBuilt, setMinYearBuilt] = useState("");
   const [maxYearBuilt, setMaxYearBuilt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
   const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
@@ -296,6 +297,7 @@ const DealsDashboard = () => {
     pageNumber = 1,
   } = {}) => {
     setLoading(true);
+    setError("");
     setIsSearchMode(false);
     const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
     const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
@@ -340,6 +342,12 @@ const DealsDashboard = () => {
         setPagination(nextPagination);
         setPage(nextPagination.page);
       })
+      .catch(() => {
+        setDeals([]);
+        setPagination({ page: 1, limit: 50, total: 0, total_pages: 1 });
+        setPage(1);
+        setError("Could not load properties. Make sure the API server is running.");
+      })
       .finally(() => {
         setLoading(false);
       });
@@ -358,6 +366,7 @@ const DealsDashboard = () => {
     }
 
     setLoading(true);
+    setError("");
     setIsSearchMode(true);
     const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
     const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
@@ -390,6 +399,12 @@ const DealsDashboard = () => {
           total_pages: 1,
         });
         setPage(1);
+      })
+      .catch(() => {
+        setDeals([]);
+        setPagination({ page: 1, limit: 50, total: 0, total_pages: 1 });
+        setPage(1);
+        setError("Could not search properties. Make sure the API server is running.");
       })
       .finally(() => {
         setLoading(false);
@@ -526,6 +541,7 @@ const DealsDashboard = () => {
       </div>
 
       {loading && <p>Loading results...</p>}
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
       <p>
         Showing page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
         {pagination.total.toLocaleString()} total results)
@@ -551,6 +567,7 @@ const DealsDashboard = () => {
 const DivorceDashboard = () => {
   const [divorceCases, setDivorceCases] = useState([]);
   const [divorceLoading, setDivorceLoading] = useState(false);
+  const [divorceError, setDivorceError] = useState("");
   const [divorcePagination, setDivorcePagination] = useState({
     page: 1,
     limit: 100,
@@ -560,6 +577,7 @@ const DivorceDashboard = () => {
 
   const fetchDivorceCases = (pageNumber = 1) => {
     setDivorceLoading(true);
+    setDivorceError("");
     axios
       .get(`${API}/divorce-cases`, {
         params: {
@@ -578,6 +596,11 @@ const DivorceDashboard = () => {
           },
         );
       })
+      .catch(() => {
+        setDivorceCases([]);
+        setDivorcePagination({ page: 1, limit: 100, total: 0, total_pages: 1 });
+        setDivorceError("Could not load divorce cases. Make sure the API server is running.");
+      })
       .finally(() => setDivorceLoading(false));
   };
 
@@ -589,6 +612,7 @@ const DivorceDashboard = () => {
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>⚖️ Divorce Cases Dashboard</h1>
       {divorceLoading && <p>Loading divorce cases...</p>}
+      {divorceError && <p style={{ color: "crimson" }}>{divorceError}</p>}
       <p>
         Showing page {divorcePagination.page} of {Math.max(divorcePagination.total_pages, 1)} (
         {divorcePagination.total.toLocaleString()} total cases)
