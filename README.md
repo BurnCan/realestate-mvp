@@ -4,13 +4,38 @@
 - Scores distressed properties
 - API + React dashboard
 
+## Startup procedure
+
+### 1) Backend setup and start
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.api:app --reload
+```
+
+The backend starts at `http://127.0.0.1:8000` by default.
+
+### 2) Frontend setup and start
+
+In a separate terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend starts at `http://127.0.0.1:5173` by default.
+
 ## Run
 
 Backend:
-uvicorn app.api:app --reload
+`uvicorn app.api:app --reload`
 
 Frontend:
-npm start
+`npm run dev` (from `frontend/`)
 
 ## Prototype scrapers
 
