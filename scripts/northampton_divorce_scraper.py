@@ -167,23 +167,72 @@ def save_cases_to_db(cases):
     """
 
     inserted_count = 0
+    normalized_names_to_check = []
     for case in cases:
         case_number = case.get("case_number", "").strip()
         if not case_number:
             continue
+
+        normalized_participants = extract_normalized_participants(
+            case.get("case_participants", "")
+        )
+        normalized_names_to_check.extend(normalized_participants)
 
         cur.execute(
             upsert_query,
             (
                 case_number,
                 case.get("case_participants"),
-                extract_normalized_participants(case.get("case_participants", "")),
+                normalized_participants,
                 case.get("case_category"),
                 parse_date(case.get("date_opened", "")),
                 case.get("status"),
             ),
         )
         inserted_count += 1
+
+    unique_normalized_names = []
+    seen_normalized_names = set()
+    for normalized_name in normalized_names_to_check:
+        if normalized_name and normalized_name not in seen_normalized_names:
+            seen_normalized_names.add(normalized_name)
+            unique_normalized_names.append(normalized_name)
+
+    owner_match_count_query = """
+        SELECT COUNT(*)
+        FROM properties p
+        WHERE (
+            TRIM(
+                CONCAT_WS(
+                    ' ',
+                    SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
+                    SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
+                )
+            ) = %s
+        )
+        OR (
+            TRIM(
+                CONCAT_WS(
+                    ' ',
+                    SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
+                    SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
+                )
+            ) = %s
+        )
+    """
+
+    for normalized_name in unique_normalized_names:
+        print(f"Checking property owner match for normalized owner: '{normalized_name}'")
+        cur.execute(owner_match_count_query, (normalized_name, normalized_name))
+        owner_match_count = cur.fetchone()[0]
+        if owner_match_count == 0:
+            print(
+                f"No property owner match found for '{normalized_name}'. Moving to next normalized owner name."
+            )
+            continue
+        print(
+            f"Found {owner_match_count} matching propert{'y' if owner_match_count == 1 else 'ies'} for '{normalized_name}'."
+        )
 
     conn.commit()
     cur.close()
