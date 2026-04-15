@@ -1,7 +1,10 @@
 import csv
+import logging
 import re
+import threading
 from functools import lru_cache
 from pathlib import Path
+from time import monotonic
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from .db import ensure_divorce_schema, ensure_properties_schema, get_conn
 
 app = FastAPI()
+DIVORCE_REFRESH_TTL_SECONDS = 300
+_last_divorce_refresh_monotonic = 0.0
+_schema_priming_started = False
+_schema_priming_lock = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
 def _normalize_text(value: str | None) -> str:
@@ -127,6 +135,9 @@ def is_sheriff_sale_property(address: str | None, muni: str | None) -> bool:
 def refresh_property_divorce_flags(conn) -> None:
     """Match normalized Pla/Def names from divorce cases to owner names."""
     cur = conn.cursor()
+    # Don't block readers/writers if another session holds locks.
+    cur.execute("SET LOCAL lock_timeout = '2s'")
+    cur.execute("SET LOCAL statement_timeout = '20s'")
     cur.execute(
         """
         CREATE TEMP TABLE temp_property_divorce_matches AS
@@ -222,6 +233,9 @@ def refresh_property_divorce_flags(conn) -> None:
             divorce_case_status = NULL,
             divorce_date_opened = NULL,
             updated_at = NOW()
+        WHERE recent_divorce IS TRUE
+           OR divorce_case_status IS NOT NULL
+           OR divorce_date_opened IS NOT NULL
         """
     )
     cur.execute(
@@ -239,6 +253,57 @@ def refresh_property_divorce_flags(conn) -> None:
     cur.execute("DROP TABLE IF EXISTS temp_property_divorce_matches")
     conn.commit()
     cur.close()
+
+
+def maybe_refresh_property_divorce_flags(conn) -> None:
+    """
+    Refresh expensive divorce matching at most once per TTL window.
+    If a lock/timeout occurs, skip the refresh so reads stay responsive.
+    """
+    global _last_divorce_refresh_monotonic
+
+    now = monotonic()
+    if now - _last_divorce_refresh_monotonic < DIVORCE_REFRESH_TTL_SECONDS:
+        return
+
+    try:
+        refresh_property_divorce_flags(conn)
+    except Exception:
+        conn.rollback()
+    else:
+        _last_divorce_refresh_monotonic = now
+
+
+def prime_database_schema() -> None:
+    """Apply lightweight schema checks."""
+    conn = get_conn()
+    try:
+        ensure_properties_schema(conn)
+        ensure_divorce_schema(conn)
+    finally:
+        conn.close()
+
+
+def _prime_database_schema_background() -> None:
+    try:
+        prime_database_schema()
+    except Exception as exc:
+        # Avoid blocking API startup if the database is temporarily unavailable/locked.
+        logger.warning("Background schema priming skipped: %s", exc)
+
+
+@app.on_event("startup")
+def start_schema_priming() -> None:
+    """Kick off schema checks without blocking server startup."""
+    global _schema_priming_started
+
+    with _schema_priming_lock:
+        if _schema_priming_started:
+            return
+        _schema_priming_started = True
+
+    thread = threading.Thread(target=_prime_database_schema_background, daemon=True)
+    thread.start()
 
 app.add_middleware(
     CORSMiddleware,
@@ -262,9 +327,7 @@ def get_deals(
     sheriff_sale_only: bool = False,
 ):
     conn = get_conn()
-    ensure_properties_schema(conn)
-    ensure_divorce_schema(conn)
-    refresh_property_divorce_flags(conn)
+    maybe_refresh_property_divorce_flags(conn)
     cur = conn.cursor()
 
     base_query = """
@@ -411,9 +474,7 @@ def get_deals(
 @app.get("/search")
 def search_deals(q: str, limit: int = 50, mode: str = "all"):
     conn = get_conn()
-    ensure_properties_schema(conn)
-    ensure_divorce_schema(conn)
-    refresh_property_divorce_flags(conn)
+    maybe_refresh_property_divorce_flags(conn)
     cur = conn.cursor()
     normalized_mode = (mode or "all").strip().lower()
     owner_name_clause, owner_name_params = _build_owner_name_clause(q)

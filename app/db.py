@@ -6,6 +6,7 @@ DB_CONFIG = {
     "password": "password",
     "host": "localhost",
     "port": 5432,
+    "connect_timeout": 5,
 }
 
 REQUIRED_PROPERTY_COLUMNS = {
@@ -105,6 +106,9 @@ def ensure_properties_schema(conn):
     This avoids runtime 500s when new columns are introduced before a manual migration.
     """
     cur = conn.cursor()
+    # Keep schema checks from blocking app startup/request handling indefinitely.
+    cur.execute("SET LOCAL lock_timeout = '2s'")
+    cur.execute("SET LOCAL statement_timeout = '15s'")
 
     cur.execute(
         """
@@ -128,6 +132,9 @@ def ensure_properties_schema(conn):
 def ensure_divorce_schema(conn):
     """Create and backfill the divorce_cases table required by scraper and API."""
     cur = conn.cursor()
+    # Keep schema checks from blocking app startup/request handling indefinitely.
+    cur.execute("SET LOCAL lock_timeout = '2s'")
+    cur.execute("SET LOCAL statement_timeout = '15s'")
 
     cur.execute(
         """
