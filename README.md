@@ -51,6 +51,7 @@ Frontend:
     - `case_category`
     - `date_opened`
     - `status`
+  - Also syncs `properties.recent_divorce`, `properties.divorce_case_status`, and `properties.divorce_date_opened` after each scraper run, so `/deals` and `/search` read precomputed values.
 
 ## New API endpoint
 
