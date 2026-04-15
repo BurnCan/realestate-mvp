@@ -9,7 +9,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.db import ensure_divorce_schema, get_conn
+from app.db import (
+    ensure_divorce_schema,
+    ensure_properties_schema,
+    get_conn,
+    sync_property_divorce_fields,
+)
 
 URL = "https://web.northamptoncounty.org/CountySuite.EServices/CaseSearch"
 
@@ -107,6 +112,7 @@ def save_cases_to_db(cases):
 
     conn = get_conn()
     ensure_divorce_schema(conn)
+    ensure_properties_schema(conn)
     cur = conn.cursor()
 
     upsert_query = """
@@ -148,6 +154,9 @@ def save_cases_to_db(cases):
 
     conn.commit()
     cur.close()
+
+    # Materialize divorce fields directly onto properties so API reads avoid runtime joins.
+    sync_property_divorce_fields(conn)
     conn.close()
     return inserted_count
 

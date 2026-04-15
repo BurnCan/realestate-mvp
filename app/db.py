@@ -163,3 +163,125 @@ def ensure_divorce_schema(conn):
 
     conn.commit()
     cur.close()
+
+
+def sync_property_divorce_fields(conn):
+    """
+    Materialize divorce metadata directly onto properties so API reads stay cheap.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TEMP TABLE temp_property_divorce_matches AS
+        WITH parsed_participants AS (
+            SELECT
+                dc.case_number,
+                dc.status,
+                dc.date_opened,
+                LOWER(TRIM((match_data)[2])) AS participant_raw
+            FROM divorce_cases dc,
+            REGEXP_MATCHES(
+                COALESCE(dc.case_participants, ''),
+                '(Pla|Def):\\s*([^:]+?)(?=\\s*(?:Pla|Def):|$)',
+                'g'
+            ) AS match_data
+        ),
+        normalized_participants AS (
+            SELECT
+                case_number,
+                status,
+                date_opened,
+                TRIM(
+                    CASE
+                        WHEN POSITION(',' IN participant_raw) > 0 THEN
+                            CONCAT_WS(
+                                ' ',
+                                TRIM(SPLIT_PART(participant_raw, ',', 1)),
+                                SPLIT_PART(TRIM(SPLIT_PART(participant_raw, ',', 2)), ' ', 1)
+                            )
+                        ELSE
+                            CONCAT_WS(
+                                ' ',
+                                SPLIT_PART(REGEXP_REPLACE(participant_raw, '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
+                                SPLIT_PART(REGEXP_REPLACE(participant_raw, '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
+                            )
+                    END
+                ) AS normalized_name
+            FROM parsed_participants
+        ),
+        normalized_properties AS (
+            SELECT
+                p.id,
+                TRIM(
+                    CONCAT_WS(
+                        ' ',
+                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
+                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_1, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
+                    )
+                ) AS owner_1_normalized,
+                TRIM(
+                    CONCAT_WS(
+                        ' ',
+                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 1),
+                        SPLIT_PART(REGEXP_REPLACE(LOWER(COALESCE(p.owners_name_2, '')), '[^a-z0-9 ]+', ' ', 'g'), ' ', 2)
+                    )
+                ) AS owner_2_normalized
+            FROM properties p
+        ),
+        ranked_matches AS (
+            SELECT
+                np.id AS property_id,
+                npt.status,
+                npt.date_opened,
+                ROW_NUMBER() OVER (
+                    PARTITION BY np.id
+                    ORDER BY
+                        CASE WHEN LOWER(COALESCE(npt.status, '')) = 'open' THEN 0 ELSE 1 END,
+                        npt.date_opened DESC NULLS LAST,
+                        npt.case_number DESC
+                ) AS rn
+            FROM normalized_properties np
+            JOIN normalized_participants npt
+                ON (
+                    np.owner_1_normalized <> ''
+                    AND np.owner_1_normalized = npt.normalized_name
+                )
+                OR (
+                    np.owner_2_normalized <> ''
+                    AND np.owner_2_normalized = npt.normalized_name
+                )
+            WHERE npt.normalized_name <> ''
+        )
+        SELECT property_id, status, date_opened
+        FROM ranked_matches
+        WHERE rn = 1
+        """
+    )
+    cur.execute(
+        """
+        UPDATE properties
+        SET
+            recent_divorce = FALSE,
+            divorce_case_status = NULL,
+            divorce_date_opened = NULL,
+            updated_at = NOW()
+        WHERE recent_divorce IS TRUE
+           OR divorce_case_status IS NOT NULL
+           OR divorce_date_opened IS NOT NULL
+        """
+    )
+    cur.execute(
+        """
+        UPDATE properties p
+        SET
+            recent_divorce = TRUE,
+            divorce_case_status = t.status,
+            divorce_date_opened = t.date_opened,
+            updated_at = NOW()
+        FROM temp_property_divorce_matches t
+        WHERE p.id = t.property_id
+        """
+    )
+    cur.execute("DROP TABLE IF EXISTS temp_property_divorce_matches")
+    conn.commit()
+    cur.close()
