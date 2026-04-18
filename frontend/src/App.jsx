@@ -141,6 +141,28 @@ const matchesYearBuiltRange = ({ deal, minYearBuilt, maxYearBuilt }) => {
   return true;
 };
 
+const formatMailingAddress = (deal) => (
+  [deal.mail_address_1, deal.mail_address_2, deal.mail_address_3]
+    .filter((line) => line && String(line).trim())
+    .join(", ")
+);
+
+const sanitizeOwnerNameForExport = (ownerName) => {
+  const value = String(ownerName || "").trim();
+  if (!value) return "";
+  const ampIndex = value.indexOf("&");
+  if (ampIndex < 0) return value;
+  return value.slice(0, ampIndex).trimEnd();
+};
+
+const escapeCsvValue = (value) => {
+  const text = String(value ?? "");
+  if (text.includes("\"") || text.includes(",") || text.includes("\n")) {
+    return `"${text.replace(/"/g, "\"\"")}"`;
+  }
+  return text;
+};
+
 const DealsTable = ({ deals }) => (
   <table width="100%" border="1" cellPadding="8">
     <thead>
@@ -172,13 +194,7 @@ const DealsTable = ({ deals }) => (
         const isBankOwned = isBankOwnedProperty(d);
         const isSheriffSale = isSheriffSaleProperty(d);
         const isOwnerOccupant = isOwnerOccupantProperty(d);
-        const mailingAddress = [
-          d.mail_address_1,
-          d.mail_address_2,
-          d.mail_address_3,
-        ]
-          .filter((line) => line && String(line).trim())
-          .join(", ");
+        const mailingAddress = formatMailingAddress(d);
 
         return (
           <tr
@@ -282,6 +298,7 @@ const DealsDashboard = () => {
   const [maxYearBuilt, setMaxYearBuilt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
   const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
@@ -470,6 +487,136 @@ const DealsDashboard = () => {
     });
   };
 
+  const doesDealMatchFrontendFilters = ({
+    deal,
+    distressedOnly,
+    bankOwnedOnly,
+    sheriffSaleOnly,
+    ownerOccupantOnly,
+    recentDivorceOnly,
+    parsedMinYearBuilt,
+    parsedMaxYearBuilt,
+    enforceMunicipalityCheck = false,
+    enforceMinScoreCheck = false,
+  }) => (
+    matchesStatusFilters({
+      deal,
+      distressedOnly,
+      bankOwnedOnly,
+      sheriffSaleOnly,
+      ownerOccupantOnly,
+      recentDivorceOnly,
+    })
+    && matchesYearBuiltRange({
+      deal,
+      minYearBuilt: parsedMinYearBuilt,
+      maxYearBuilt: parsedMaxYearBuilt,
+    })
+    && (!enforceMunicipalityCheck || matchesMunicipality(deal, selectedMunis))
+    && (!enforceMinScoreCheck || (deal.deal_score ?? 0) >= minScore)
+  );
+
+  const exportFilteredDealsToCsv = async () => {
+    setExporting(true);
+    setError("");
+    try {
+      const distressedOnly = showDistressedOnly;
+      const bankOwnedOnly = showBankOwnedOnly;
+      const sheriffSaleOnly = showSheriffSaleOnly;
+      const ownerOccupantOnly = showOwnerOccupantOnly;
+      const recentDivorceOnly = showRecentDivorceOnly;
+      const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
+      const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
+      let allDeals = [];
+
+      if (isSearchMode && (search || "").trim()) {
+        const response = await axios.get(`${API}/search`, {
+          params: {
+            q: search.trim(),
+            mode: searchMode,
+            limit: 100000,
+          },
+        });
+        const results = response.data.results || [];
+        allDeals = results.filter((deal) => doesDealMatchFrontendFilters({
+          deal,
+          distressedOnly,
+          bankOwnedOnly,
+          sheriffSaleOnly,
+          ownerOccupantOnly,
+          recentDivorceOnly,
+          parsedMinYearBuilt,
+          parsedMaxYearBuilt,
+          enforceMunicipalityCheck: true,
+          enforceMinScoreCheck: true,
+        }));
+      } else {
+        const limit = 500;
+        const baseParams = {
+          munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
+          min_score: minScore || 0,
+          min_year_built: parsedMinYearBuilt,
+          max_year_built: parsedMaxYearBuilt,
+          distressed_only: distressedOnly || undefined,
+          bank_owned_only: bankOwnedOnly || undefined,
+          sheriff_sale_only: sheriffSaleOnly || undefined,
+          recent_divorce_only: recentDivorceOnly || undefined,
+          limit,
+        };
+        let pageNumber = 1;
+        let totalPages = 1;
+
+        while (pageNumber <= totalPages) {
+          const response = await axios.get(`${API}/deals`, {
+            params: {
+              ...baseParams,
+              page: pageNumber,
+            },
+          });
+          const results = response.data.results || [];
+          allDeals.push(...results.filter((deal) => doesDealMatchFrontendFilters({
+            deal,
+            distressedOnly,
+            bankOwnedOnly,
+            sheriffSaleOnly,
+            ownerOccupantOnly,
+            recentDivorceOnly,
+            parsedMinYearBuilt,
+            parsedMaxYearBuilt,
+          })));
+          totalPages = Math.max(response.data.pagination?.total_pages || 1, 1);
+          pageNumber += 1;
+        }
+      }
+
+      const csvHeader = ["Owner Name 1", "Mailing Address"];
+      const csvRows = allDeals.map((deal) => ([
+        sanitizeOwnerNameForExport(deal.owners_name_1),
+        formatMailingAddress(deal),
+      ]));
+      const csvText = [
+        csvHeader.map(escapeCsvValue).join(","),
+        ...csvRows.map((row) => row.map(escapeCsvValue).join(",")),
+      ].join("\n");
+
+      const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const now = new Date().toISOString().slice(0, 10);
+      link.download = `owners-mailing-addresses-${now}.csv`;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Could not export CSV. Make sure the API server is running.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const toggleMunicipality = (code) => {
     setSelectedMunis((current) => (
       current.includes(code)
@@ -608,6 +755,9 @@ const DealsDashboard = () => {
           ))}
 
           <button onClick={applyFilters}>Apply Filters</button>
+          <button onClick={exportFilteredDealsToCsv} disabled={exporting}>
+            {exporting ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
+          </button>
         </div>
       </fieldset>
 
