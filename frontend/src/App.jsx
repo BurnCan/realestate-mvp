@@ -71,9 +71,12 @@ const formatOwnershipChangeDate = (value) => {
   return date.toLocaleDateString();
 };
 
-const matchesMunicipality = (deal, selectedMuni) => {
-  if (!selectedMuni) return true;
-  return normalizeMuniCode(deal.muni) === normalizeMuniCode(selectedMuni);
+const matchesMunicipality = (deal, selectedMunis) => {
+  if (!selectedMunis.length) return true;
+  const dealMuni = normalizeMuniCode(deal.muni);
+  return selectedMunis.some((selectedMuni) => (
+    dealMuni === normalizeMuniCode(selectedMuni)
+  ));
 };
 
 const isDistressedProperty = (deal) => {
@@ -271,7 +274,7 @@ const Navigation = ({ currentPath, navigate }) => (
 
 const DealsDashboard = () => {
   const [deals, setDeals] = useState([]);
-  const [muni, setMuni] = useState("");
+  const [selectedMunis, setSelectedMunis] = useState([]);
   const [minScore, setMinScore] = useState(0);
   const [search, setSearch] = useState("");
   const [searchMode, setSearchMode] = useState("all");
@@ -309,7 +312,7 @@ const DealsDashboard = () => {
     axios
       .get(`${API}/deals`, {
         params: {
-          muni: muni || undefined,
+          munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
           min_score: minScore || 0,
           min_year_built: parsedMinYearBuilt,
           max_year_built: parsedMaxYearBuilt,
@@ -393,7 +396,7 @@ const DealsDashboard = () => {
               sheriffSaleOnly: showSheriffSaleOnly,
               ownerOccupantOnly: showOwnerOccupantOnly,
               recentDivorceOnly: showRecentDivorceOnly,
-            }) && matchesMunicipality(deal, muni) && (deal.deal_score ?? 0) >= minScore && matchesYearBuiltRange({
+            }) && matchesMunicipality(deal, selectedMunis) && (deal.deal_score ?? 0) >= minScore && matchesYearBuiltRange({
               deal,
               minYearBuilt: parsedMinYearBuilt,
               maxYearBuilt: parsedMaxYearBuilt,
@@ -432,6 +435,14 @@ const DealsDashboard = () => {
       recentDivorceOnly: showRecentDivorceOnly,
       pageNumber: 1,
     });
+  };
+
+  const toggleMunicipality = (code) => {
+    setSelectedMunis((current) => (
+      current.includes(code)
+        ? current.filter((selectedCode) => selectedCode !== code)
+        : [...current, code]
+    ));
   };
 
   const goToNextPage = () => {
@@ -482,14 +493,41 @@ const DealsDashboard = () => {
         </select>
         <button onClick={() => searchDeals(search)}>Search</button>
 
-        <select value={muni} onChange={(e) => setMuni(e.target.value)}>
-          <option value="">All municipalities</option>
+        <div
+          style={{
+            border: "1px solid #ccc",
+            borderRadius: 4,
+            padding: 8,
+            minWidth: 240,
+            maxHeight: 160,
+            overflowY: "auto",
+          }}
+        >
+          <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <input
+              type="checkbox"
+              checked={!selectedMunis.length}
+              onChange={(e) => {
+                if (e.target.checked) setSelectedMunis([]);
+              }}
+            />
+            All municipalities
+          </label>
+
           {Object.entries(MUNICIPALITIES).map(([code, name]) => (
-            <option key={code} value={code}>
+            <label
+              key={code}
+              style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedMunis.includes(code)}
+                onChange={() => toggleMunicipality(code)}
+              />
               {name}
-            </option>
+            </label>
           ))}
-        </select>
+        </div>
 
         <input
           type="number"
