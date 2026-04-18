@@ -295,6 +295,39 @@ const DealsDashboard = () => {
     total_pages: 1,
   });
   const [isSearchMode, setIsSearchMode] = useState(false);
+  const includeFilterToggles = [
+    {
+      key: "distressed",
+      label: "Distressed properties",
+      checked: showDistressedOnly,
+      onChange: setShowDistressedOnly,
+    },
+    {
+      key: "bankOwned",
+      label: "Bank owned properties",
+      checked: showBankOwnedOnly,
+      onChange: setShowBankOwnedOnly,
+    },
+    {
+      key: "sheriffSale",
+      label: "Sheriff sale",
+      checked: showSheriffSaleOnly,
+      onChange: setShowSheriffSaleOnly,
+    },
+    {
+      key: "ownerOccupant",
+      label: "Owner occupant",
+      checked: showOwnerOccupantOnly,
+      onChange: setShowOwnerOccupantOnly,
+    },
+    {
+      key: "recentDivorce",
+      label: "Recent divorce",
+      checked: showRecentDivorceOnly,
+      onChange: setShowRecentDivorceOnly,
+    },
+  ];
+
   const fetchDeals = ({
     distressedOnly = false,
     bankOwnedOnly = false,
@@ -492,111 +525,91 @@ const DealsDashboard = () => {
           <option value="owner">Owner</option>
         </select>
         <button onClick={() => searchDeals(search)}>Search</button>
-
-        <div
-          style={{
-            border: "1px solid #ccc",
-            borderRadius: 4,
-            padding: 8,
-            minWidth: 240,
-            maxHeight: 160,
-            overflowY: "auto",
-          }}
-        >
-          <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-            <input
-              type="checkbox"
-              checked={!selectedMunis.length}
-              onChange={(e) => {
-                if (e.target.checked) setSelectedMunis([]);
-              }}
-            />
-            All municipalities
-          </label>
-
-          {Object.entries(MUNICIPALITIES).map(([code, name]) => (
-            <label
-              key={code}
-              style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}
-            >
-              <input
-                type="checkbox"
-                checked={selectedMunis.includes(code)}
-                onChange={() => toggleMunicipality(code)}
-              />
-              {name}
-            </label>
-          ))}
-        </div>
-
         <input
           type="number"
           placeholder="Min Score"
           value={minScore}
           onChange={(e) => setMinScore(Number(e.target.value))}
         />
-
-        <input
-          type="number"
-          placeholder="Min Year Built"
-          value={minYearBuilt}
-          onChange={(e) => setMinYearBuilt(e.target.value)}
-        />
-
-        <input
-          type="number"
-          placeholder="Max Year Built"
-          value={maxYearBuilt}
-          onChange={(e) => setMaxYearBuilt(e.target.value)}
-        />
-
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={showDistressedOnly}
-            onChange={(e) => setShowDistressedOnly(e.target.checked)}
-          />
-          Distressed properties only
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={showBankOwnedOnly}
-            onChange={(e) => setShowBankOwnedOnly(e.target.checked)}
-          />
-          Bank owned properties only
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={showSheriffSaleOnly}
-            onChange={(e) => setShowSheriffSaleOnly(e.target.checked)}
-          />
-          Sheriff sale only
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={showOwnerOccupantOnly}
-            onChange={(e) => setShowOwnerOccupantOnly(e.target.checked)}
-          />
-          Owner occupant only
-        </label>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={showRecentDivorceOnly}
-            onChange={(e) => setShowRecentDivorceOnly(e.target.checked)}
-          />
-          Recent divorce only
-        </label>
-
-        <button onClick={applyFilters}>Apply Filters</button>
       </div>
+
+      <fieldset
+        style={{
+          border: "1px solid #ccc",
+          borderRadius: 6,
+          padding: 12,
+          marginBottom: 16,
+        }}
+      >
+        <legend style={{ padding: "0 6px", fontWeight: "bold" }}>Include Filters</legend>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div
+            style={{
+              border: "1px solid #ddd",
+              borderRadius: 4,
+              padding: 8,
+              minWidth: 240,
+              maxHeight: 180,
+              overflowY: "auto",
+            }}
+          >
+            <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <input
+                type="checkbox"
+                checked={!selectedMunis.length}
+                onChange={(e) => {
+                  if (e.target.checked) setSelectedMunis([]);
+                }}
+              />
+              All municipalities
+            </label>
+
+            {Object.entries(MUNICIPALITIES).map(([code, name]) => (
+              <label
+                key={code}
+                style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedMunis.includes(code)}
+                  onChange={() => toggleMunicipality(code)}
+                />
+                {name}
+              </label>
+            ))}
+          </div>
+
+          <input
+            type="number"
+            placeholder="Min Year Built"
+            value={minYearBuilt}
+            onChange={(e) => setMinYearBuilt(e.target.value)}
+          />
+
+          <input
+            type="number"
+            placeholder="Max Year Built"
+            value={maxYearBuilt}
+            onChange={(e) => setMaxYearBuilt(e.target.value)}
+          />
+
+          {includeFilterToggles.map((filter) => (
+            <label
+              key={filter.key}
+              style={{ display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <input
+                type="checkbox"
+                checked={filter.checked}
+                onChange={(e) => filter.onChange(e.target.checked)}
+              />
+              {filter.label}
+            </label>
+          ))}
+
+          <button onClick={applyFilters}>Apply Filters</button>
+        </div>
+      </fieldset>
 
       {loading && <p>Loading results...</p>}
       {error && <p style={{ color: "crimson" }}>{error}</p>}
