@@ -316,6 +316,7 @@ const DealsDashboard = () => {
           distressed_only: distressedOnly || undefined,
           bank_owned_only: bankOwnedOnly || undefined,
           sheriff_sale_only: sheriffSaleOnly || undefined,
+          recent_divorce_only: recentDivorceOnly || undefined,
           limit: 50,
           page: pageNumber,
         },

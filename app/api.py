@@ -166,6 +166,7 @@ def get_deals(
     distressed_only: bool = False,
     bank_owned_only: bool = False,
     sheriff_sale_only: bool = False,
+    recent_divorce_only: bool = False,
 ):
     conn = get_conn()
     cur = conn.cursor()
@@ -252,6 +253,9 @@ def get_deals(
                 "REGEXP_REPLACE(LOWER(COALESCE(address, '')), '[^a-z0-9 ]', '', 'g') = ANY(%s)"
             )
             params.append(sheriff_matches)
+
+    if recent_divorce_only:
+        status_conditions.append("COALESCE(recent_divorce, FALSE) IS TRUE")
 
     if status_conditions:
         base_query += " AND (" + " OR ".join(status_conditions) + ")"
