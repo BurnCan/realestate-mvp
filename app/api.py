@@ -91,6 +91,21 @@ def _muni_filter_candidates(muni: str | None) -> list[str]:
     return sorted({raw, numeric, padded})
 
 
+def _muni_filter_candidates_from_list(munis: str | None) -> list[str]:
+    raw_values = [
+        part.strip()
+        for part in (munis or "").split(",")
+        if part and part.strip()
+    ]
+    if not raw_values:
+        return []
+
+    normalized: set[str] = set()
+    for raw in raw_values:
+        normalized.update(_muni_filter_candidates(raw))
+    return sorted(normalized)
+
+
 @lru_cache(maxsize=1)
 def get_sheriff_sale_matches() -> set[str]:
     csv_files = sorted(Path(".").glob("*.csv"), reverse=True)
@@ -158,6 +173,7 @@ app.add_middleware(
 @app.get("/deals")
 def get_deals(
     muni: str | None = None,
+    munis: str | None = None,
     min_score: float = 0,
     min_year_built: int | None = None,
     max_year_built: int | None = None,
@@ -197,7 +213,10 @@ def get_deals(
 
     params = []
 
-    muni_candidates = _muni_filter_candidates(muni)
+    muni_candidates = sorted({
+        *_muni_filter_candidates(muni),
+        *_muni_filter_candidates_from_list(munis),
+    })
     if muni_candidates:
         if len(muni_candidates) == 1:
             base_query += " AND TRIM(COALESCE(muni, '')) = %s"
