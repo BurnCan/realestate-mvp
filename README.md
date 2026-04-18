@@ -15,7 +15,7 @@ pip install -r requirements.txt
 uvicorn app.api:app --reload
 ```
 
-The backend starts at `http://127.0.0.1:8000` by default.
+The backend listens on port `8000` by default. For internet access, use `http://64.121.154.166:8000`.
 
 ### 2) Frontend setup and start
 
@@ -27,7 +27,13 @@ npm install
 npm run dev
 ```
 
-The frontend starts at `http://127.0.0.1:5173` by default.
+The frontend starts at `http://127.0.0.1:5173` by default and proxies `/api` requests to `http://64.121.154.166:8000`.
+
+If you need to change the API host later, set:
+
+```bash
+VITE_API_PROXY_TARGET=http://<new-ip-or-host>:8000 npm run dev
+```
 
 ## Run
 
