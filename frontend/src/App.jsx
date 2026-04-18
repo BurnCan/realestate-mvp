@@ -114,16 +114,18 @@ const matchesStatusFilters = ({
   bankOwnedOnly,
   sheriffSaleOnly,
   ownerOccupantOnly,
+  recentDivorceOnly,
 }) => {
   const selectedFilters = [
     distressedOnly && isDistressedProperty(deal),
     bankOwnedOnly && isBankOwnedProperty(deal),
     sheriffSaleOnly && isSheriffSaleProperty(deal),
     ownerOccupantOnly && isOwnerOccupantProperty(deal),
+    recentDivorceOnly && Boolean(deal.recent_divorce),
   ];
 
   const anyFilterSelected =
-    distressedOnly || bankOwnedOnly || sheriffSaleOnly || ownerOccupantOnly;
+    distressedOnly || bankOwnedOnly || sheriffSaleOnly || ownerOccupantOnly || recentDivorceOnly;
   return anyFilterSelected ? selectedFilters.some(Boolean) : true;
 };
 
@@ -281,6 +283,7 @@ const DealsDashboard = () => {
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
   const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
   const [showOwnerOccupantOnly, setShowOwnerOccupantOnly] = useState(false);
+  const [showRecentDivorceOnly, setShowRecentDivorceOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -294,6 +297,7 @@ const DealsDashboard = () => {
     bankOwnedOnly = false,
     sheriffSaleOnly = false,
     ownerOccupantOnly = false,
+    recentDivorceOnly = false,
     pageNumber = 1,
   } = {}) => {
     setLoading(true);
@@ -332,6 +336,7 @@ const DealsDashboard = () => {
               bankOwnedOnly,
               sheriffSaleOnly,
               ownerOccupantOnly,
+              recentDivorceOnly,
             }) && matchesYearBuiltRange({
               deal,
               minYearBuilt: parsedMinYearBuilt,
@@ -361,6 +366,7 @@ const DealsDashboard = () => {
         bankOwnedOnly: showBankOwnedOnly,
         sheriffSaleOnly: showSheriffSaleOnly,
         ownerOccupantOnly: showOwnerOccupantOnly,
+        recentDivorceOnly: showRecentDivorceOnly,
         pageNumber: 1,
       });
     }
@@ -385,6 +391,7 @@ const DealsDashboard = () => {
               bankOwnedOnly: showBankOwnedOnly,
               sheriffSaleOnly: showSheriffSaleOnly,
               ownerOccupantOnly: showOwnerOccupantOnly,
+              recentDivorceOnly: showRecentDivorceOnly,
             }) && matchesMunicipality(deal, muni) && (deal.deal_score ?? 0) >= minScore && matchesYearBuiltRange({
               deal,
               minYearBuilt: parsedMinYearBuilt,
@@ -421,6 +428,7 @@ const DealsDashboard = () => {
       bankOwnedOnly: showBankOwnedOnly,
       sheriffSaleOnly: showSheriffSaleOnly,
       ownerOccupantOnly: showOwnerOccupantOnly,
+      recentDivorceOnly: showRecentDivorceOnly,
       pageNumber: 1,
     });
   };
@@ -432,6 +440,7 @@ const DealsDashboard = () => {
       bankOwnedOnly: showBankOwnedOnly,
       sheriffSaleOnly: showSheriffSaleOnly,
       ownerOccupantOnly: showOwnerOccupantOnly,
+      recentDivorceOnly: showRecentDivorceOnly,
       pageNumber: page + 1,
     });
   };
@@ -443,6 +452,7 @@ const DealsDashboard = () => {
       bankOwnedOnly: showBankOwnedOnly,
       sheriffSaleOnly: showSheriffSaleOnly,
       ownerOccupantOnly: showOwnerOccupantOnly,
+      recentDivorceOnly: showRecentDivorceOnly,
       pageNumber: page - 1,
     });
   };
@@ -535,6 +545,15 @@ const DealsDashboard = () => {
             onChange={(e) => setShowOwnerOccupantOnly(e.target.checked)}
           />
           Owner occupant only
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={showRecentDivorceOnly}
+            onChange={(e) => setShowRecentDivorceOnly(e.target.checked)}
+          />
+          Recent divorce only
         </label>
 
         <button onClick={applyFilters}>Apply Filters</button>
