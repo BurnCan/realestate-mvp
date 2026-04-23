@@ -966,9 +966,6 @@ const CampaignsDashboard = ({ navigate }) => {
             <tr>
               <th>Name</th>
               <th>Created</th>
-              <th>Snapshot Results</th>
-              <th>Visitors</th>
-              <th>Tracker URL</th>
             </tr>
           </thead>
           <tbody>
@@ -980,11 +977,6 @@ const CampaignsDashboard = ({ navigate }) => {
                   </button>
                 </td>
                 <td>{formatOwnershipChangeDate(campaign.created_at)}</td>
-                <td>{campaign.results_count}</td>
-                <td>{campaign.visitors}</td>
-                <td>
-                  <code>{`${window.location.origin}${campaign.tracker_path}`}</code>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -1018,12 +1010,7 @@ const CampaignDetailDashboard = ({ campaignId }) => {
         <>
           <h1>📬 {campaign.name}</h1>
           <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
-          <p>Visitors via tracker: <b>{campaign.visitors}</b></p>
-                    <p>Matched properties: <b>{campaign.results_count}</b></p>
-          <p>
-            Tracker URL: <code>{`${window.location.origin}${campaign.tracker_path}`}</code>
-          </p>
-          <DealsTable deals={campaign.results || []} />
+          <p>Campaign created successfully.</p>
         </>
       )}
     </div>
