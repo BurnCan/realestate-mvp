@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 class CampaignCreateRequest(BaseModel):
     name: str
     target_url: str | None = None
+    parcel_ids: list[str] | None = None
     muni: str | None = None
     munis: str | None = None
     min_score: float = 0
@@ -612,6 +613,20 @@ def _resolve_campaign_property_rows(cur, payload: CampaignCreateRequest) -> list
     return cur.fetchall()
 
 
+def _normalize_campaign_parcel_ids(parcel_ids: list[str] | None) -> list[str]:
+    if parcel_ids is None:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_parcel_id in parcel_ids:
+        parcel_id = str(raw_parcel_id or "").strip()
+        if not parcel_id or parcel_id in seen:
+            continue
+        seen.add(parcel_id)
+        normalized.append(parcel_id)
+    return normalized
+
+
 def _chunked(values: list, chunk_size: int):
     iterator = iter(values)
     while chunk := list(islice(iterator, chunk_size)):
@@ -705,9 +720,13 @@ def create_campaign(payload: CampaignCreateRequest):
         slug = f"{base_slug}-{suffix}"
         suffix += 1
 
-    snapshot_rows = _resolve_campaign_property_rows(cur, payload)
-    snapshot_deals = [_row_to_deal(row) for row in snapshot_rows]
-    snapshot_parcel_ids = list(dict.fromkeys([deal.get("parcel_id") for deal in snapshot_deals if deal.get("parcel_id")]))
+    provided_parcel_ids = _normalize_campaign_parcel_ids(payload.parcel_ids)
+    if payload.parcel_ids is not None:
+        snapshot_parcel_ids = provided_parcel_ids
+    else:
+        snapshot_rows = _resolve_campaign_property_rows(cur, payload)
+        snapshot_deals = [_row_to_deal(row) for row in snapshot_rows]
+        snapshot_parcel_ids = list(dict.fromkeys([deal.get("parcel_id") for deal in snapshot_deals if deal.get("parcel_id")]))
 
     tracker_slug = secrets.token_urlsafe(6)
     cur.execute(
