@@ -151,8 +151,21 @@ const sanitizeOwnerNameForExport = (ownerName) => {
   const value = String(ownerName || "").trim();
   if (!value) return "";
   const ampIndex = value.indexOf("&");
-  if (ampIndex < 0) return value;
-  return value.slice(0, ampIndex).trimEnd();
+  const firstOwnerOnly = ampIndex < 0 ? value : value.slice(0, ampIndex).trimEnd();
+
+  const withoutSuffixes = firstOwnerOnly
+    .split(/\s+/)
+    .filter((token) => !/^(et|al|jr|sr|iii|iv)\.?$/i.test(token))
+    .join(" ")
+    .trim();
+
+  if (!withoutSuffixes) return "";
+
+  const nameParts = withoutSuffixes.split(/\s+/);
+  if (nameParts.length < 2) return withoutSuffixes;
+
+  const [lastName, ...givenNames] = nameParts;
+  return `${givenNames.join(" ")} ${lastName}`.trim();
 };
 
 const escapeCsvValue = (value) => {
