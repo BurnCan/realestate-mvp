@@ -597,12 +597,15 @@ def create_campaign(payload: CampaignCreateRequest):
     campaign_id, created_at = cur.fetchone()
 
     for deal in deals:
+        parcel_id = deal.get("parcel_id")
+        if parcel_id is not None:
+            parcel_id = str(parcel_id)
         cur.execute(
             """
             INSERT INTO campaign_properties (campaign_id, parcel_id)
             VALUES (%s, %s)
             """,
-            [campaign_id, deal.get("parcel_id")],
+            [campaign_id, parcel_id],
         )
 
     conn.commit()
