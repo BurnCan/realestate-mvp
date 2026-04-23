@@ -675,14 +675,14 @@ const DealsDashboard = () => {
         // Use a generic Event for broader browser compatibility.
         window.dispatchEvent(new Event("popstate"));
       } else {
-        setError("Could not create campaign snapshot.");
+        setError("Could not create campaign.");
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
       if (typeof detail === "string" && detail.trim()) {
-        setError(`Could not create campaign snapshot: ${detail}`);
+        setError(`Could not create campaign: ${detail}`);
       } else {
-        setError("Could not create campaign snapshot.");
+        setError("Could not create campaign.");
       }
     } finally {
       setCreatingCampaign(false);

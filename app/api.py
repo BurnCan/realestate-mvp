@@ -1,5 +1,4 @@
 import csv
-import json
 import logging
 import re
 import secrets
@@ -600,10 +599,10 @@ def create_campaign(payload: CampaignCreateRequest):
     for deal in deals:
         cur.execute(
             """
-            INSERT INTO campaign_properties (campaign_id, parcel_id, snapshot_data)
-            VALUES (%s, %s, %s::jsonb)
+            INSERT INTO campaign_properties (campaign_id, parcel_id)
+            VALUES (%s, %s)
             """,
-            [campaign_id, deal.get("parcel_id"), json.dumps(deal, default=str)],
+            [campaign_id, deal.get("parcel_id")],
         )
 
     conn.commit()
@@ -680,14 +679,33 @@ def get_campaign(campaign_id: int):
 
     cur.execute(
         """
-        SELECT snapshot_data
-        FROM campaign_properties
-        WHERE campaign_id = %s
-        ORDER BY id ASC
+        SELECT
+            p.parcel_id,
+            p.address,
+            p.muni,
+            p.year_built,
+            p.assessed_value,
+            p.total_assessed_value,
+            p.owners_hidename,
+            p.owners_name_1,
+            p.owners_name_2,
+            p.ownership_change_date,
+            p.mail_address_1,
+            p.mail_address_2,
+            p.mail_address_3,
+            p.deal_score,
+            p.sale_type,
+            p.recent_divorce,
+            p.divorce_case_status,
+            p.divorce_date_opened
+        FROM campaign_properties cp
+        JOIN properties p ON p.parcel_id = cp.parcel_id
+        WHERE cp.campaign_id = %s
+        ORDER BY cp.id ASC
         """,
         [campaign_id],
     )
-    deals = [row[0] for row in cur.fetchall()]
+    deals = [_row_to_deal(row) for row in cur.fetchall()]
     cur.close()
     conn.close()
     return {
