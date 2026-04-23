@@ -9,6 +9,7 @@ from itertools import islice
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -636,14 +637,27 @@ def _chunked(values: list, chunk_size: int):
 def _fetch_campaign_deals(cur, campaign_id: int) -> list[dict]:
     cur.execute(
         """
-        SELECT cp.parcel_id
+        SELECT cp.parcel_id, cp.snapshot_data
         FROM campaign_properties cp
         WHERE cp.campaign_id = %s
         ORDER BY cp.id ASC
         """,
         [campaign_id],
     )
-    parcel_ids = [row[0] for row in cur.fetchall() if row[0]]
+    rows = cur.fetchall()
+    if not rows:
+        return []
+
+    deals: list[dict] = []
+    for parcel_id, snapshot_data in rows:
+        if isinstance(snapshot_data, dict):
+            deals.append(snapshot_data)
+            continue
+        deals.append({"parcel_id": parcel_id})
+    return deals
+
+
+def _fetch_property_deals_by_parcel_ids(cur, parcel_ids: list[str]) -> list[dict]:
     if not parcel_ids:
         return []
 
@@ -722,11 +736,11 @@ def create_campaign(payload: CampaignCreateRequest):
 
     provided_parcel_ids = _normalize_campaign_parcel_ids(payload.parcel_ids)
     if payload.parcel_ids is not None:
-        snapshot_parcel_ids = provided_parcel_ids
+        snapshot_deals = _fetch_property_deals_by_parcel_ids(cur, provided_parcel_ids)
     else:
         snapshot_rows = _resolve_campaign_property_rows(cur, payload)
         snapshot_deals = [_row_to_deal(row) for row in snapshot_rows]
-        snapshot_parcel_ids = list(dict.fromkeys([deal.get("parcel_id") for deal in snapshot_deals if deal.get("parcel_id")]))
+    snapshot_parcel_ids = list(dict.fromkeys([deal.get("parcel_id") for deal in snapshot_deals if deal.get("parcel_id")]))
 
     tracker_slug = secrets.token_urlsafe(6)
     cur.execute(
@@ -752,8 +766,13 @@ def create_campaign(payload: CampaignCreateRequest):
             VALUES (%s, %s, %s::jsonb)
             """,
             [
-                [campaign_id, parcel_id, json.dumps({"parcel_id": parcel_id})]
-                for parcel_id in snapshot_parcel_ids
+                [
+                    campaign_id,
+                    deal["parcel_id"],
+                    json.dumps(jsonable_encoder(deal)),
+                ]
+                for deal in snapshot_deals
+                if deal.get("parcel_id")
             ],
         )
 
