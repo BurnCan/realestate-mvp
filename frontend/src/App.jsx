@@ -669,13 +669,13 @@ const DealsDashboard = () => {
         search_mode: searchMode,
       };
       const response = await axios.post(`${API}/campaigns`, payload);
-      const campaignId = response?.data?.id;
-      if (campaignId) {
+      const campaignId = response?.data?.id ?? response?.data?.campaign_id;
+      if (campaignId !== undefined && campaignId !== null && String(campaignId).trim() !== "") {
         window.history.pushState({}, "", `/campaigns/${campaignId}`);
         // Use a generic Event for broader browser compatibility.
         window.dispatchEvent(new Event("popstate"));
       } else {
-        setError("Could not create campaign.");
+        setError("Campaign was created, but no campaign id was returned.");
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -831,7 +831,7 @@ const DealsDashboard = () => {
             {exporting ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
           </button>
           <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
-            {creatingCampaign ? "Creating Campaign..." : "Create Campaign Snapshot"}
+            {creatingCampaign ? "Creating Campaign..." : "Create Campaign"}
           </button>
         </div>
       </fieldset>
@@ -1019,7 +1019,7 @@ const CampaignDetailDashboard = ({ campaignId }) => {
           <h1>📬 {campaign.name}</h1>
           <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
           <p>Visitors via tracker: <b>{campaign.visitors}</b></p>
-          <p>Snapshot results: <b>{campaign.results_count}</b></p>
+                    <p>Matched properties: <b>{campaign.results_count}</b></p>
           <p>
             Tracker URL: <code>{`${window.location.origin}${campaign.tracker_path}`}</code>
           </p>
