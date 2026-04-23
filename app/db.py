@@ -175,7 +175,7 @@ def ensure_divorce_schema(conn):
 
 
 def ensure_campaign_schema(conn):
-    """Create campaign snapshot and visitor tracking tables."""
+    """Create campaign and visitor tracking tables."""
     cur = conn.cursor()
 
     cur.execute(
@@ -254,9 +254,15 @@ def ensure_campaign_schema(conn):
             id SERIAL PRIMARY KEY,
             campaign_id INT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
             parcel_id TEXT,
-            snapshot_data JSONB NOT NULL,
+            snapshot_data JSONB,
             created_at TIMESTAMP DEFAULT NOW()
         )
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE campaign_properties
+        ALTER COLUMN snapshot_data DROP NOT NULL
         """
     )
     cur.execute(
