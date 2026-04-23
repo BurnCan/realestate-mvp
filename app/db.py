@@ -99,6 +99,14 @@ REQUIRED_DIVORCE_COLUMNS = {
     "updated_at": "TIMESTAMP DEFAULT NOW()",
 }
 
+REQUIRED_CAMPAIGN_COLUMNS = {
+    "name": "TEXT",
+    "tracker_slug": "TEXT UNIQUE",
+    "filters_snapshot": "JSONB NOT NULL DEFAULT '{}'::JSONB",
+    "results_count": "INT NOT NULL DEFAULT 0",
+    "created_at": "TIMESTAMP DEFAULT NOW()",
+}
+
 
 def get_conn():
     return psycopg2.connect(**DB_CONFIG)
@@ -159,6 +167,65 @@ def ensure_divorce_schema(conn):
         """
         CREATE INDEX IF NOT EXISTS idx_divorce_cases_status
             ON divorce_cases (status)
+        """
+    )
+
+    conn.commit()
+    cur.close()
+
+
+def ensure_campaign_schema(conn):
+    """Create campaign snapshot and visitor tracking tables."""
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS campaigns (
+            id SERIAL PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+
+    for column, column_type in REQUIRED_CAMPAIGN_COLUMNS.items():
+        cur.execute(
+            f"ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS campaign_properties (
+            id SERIAL PRIMARY KEY,
+            campaign_id INT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+            parcel_id TEXT,
+            snapshot_data JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_campaign_properties_campaign_id
+            ON campaign_properties (campaign_id)
+        """
+    )
+
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS campaign_visits (
+            id SERIAL PRIMARY KEY,
+            campaign_id INT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+            visited_at TIMESTAMP DEFAULT NOW(),
+            ip_address TEXT,
+            user_agent TEXT,
+            referer TEXT
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_campaign_visits_campaign_id
+            ON campaign_visits (campaign_id)
         """
     )
 
