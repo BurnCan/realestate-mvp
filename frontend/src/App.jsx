@@ -590,10 +590,20 @@ const DealsDashboard = () => {
       }
 
       const csvHeader = ["Owner Name 1", "Mailing Address"];
-      const csvRows = allDeals.map((deal) => ([
-        sanitizeOwnerNameForExport(deal.owners_name_1),
-        formatMailingAddress(deal),
-      ]));
+      const seenAddresses = new Set();
+      const csvRows = allDeals
+        .map((deal) => ([
+          sanitizeOwnerNameForExport(deal.owners_name_1),
+          formatMailingAddress(deal),
+        ]))
+        .filter(([, mailingAddress]) => {
+          const normalizedAddress = (mailingAddress || "").trim().toLowerCase();
+          if (!normalizedAddress || seenAddresses.has(normalizedAddress)) {
+            return false;
+          }
+          seenAddresses.add(normalizedAddress);
+          return true;
+        });
       const csvText = [
         csvHeader.map(escapeCsvValue).join(","),
         ...csvRows.map((row) => row.map(escapeCsvValue).join(",")),
