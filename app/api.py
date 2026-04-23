@@ -543,43 +543,6 @@ def create_campaign(payload: CampaignCreateRequest):
     cur = conn.cursor()
     ensure_campaign_schema(conn)
 
-    if payload.search_query and payload.search_query.strip():
-        rows = _search_rows(cur, payload.search_query.strip(), payload.search_mode, limit=100000)
-        results = [_row_to_deal(r) for r in rows]
-        filtered = []
-        muni_candidates = sorted({
-            *_muni_filter_candidates(payload.muni),
-            *_muni_filter_candidates_from_list(payload.munis),
-        })
-        for deal in results:
-            if muni_candidates and str((deal.get("muni") or "")).strip() not in muni_candidates:
-                continue
-            score = deal.get("deal_score")
-            if score is None or score < payload.min_score:
-                continue
-            year_built = deal.get("year_built")
-            if payload.min_year_built is not None and (year_built is None or year_built < payload.min_year_built):
-                continue
-            if payload.max_year_built is not None and (year_built is None or year_built > payload.max_year_built):
-                continue
-            filtered.append(deal)
-        deals = filtered
-    else:
-        query, params = _build_filtered_deals_query(
-            muni=payload.muni,
-            munis=payload.munis,
-            min_score=payload.min_score,
-            min_year_built=payload.min_year_built,
-            max_year_built=payload.max_year_built,
-            distressed_only=payload.distressed_only,
-            bank_owned_only=payload.bank_owned_only,
-            sheriff_sale_only=payload.sheriff_sale_only,
-            owner_occupant_only=payload.owner_occupant_only,
-            recent_divorce_only=payload.recent_divorce_only,
-        )
-        cur.execute(f"{query} ORDER BY deal_score DESC")
-        deals = [_row_to_deal(r) for r in cur.fetchall()]
-
     tracker_slug = secrets.token_urlsafe(6)
     cur.execute(
         """
@@ -591,22 +554,10 @@ def create_campaign(payload: CampaignCreateRequest):
             name,
             tracker_slug,
             payload.model_dump_json(),
-            len(deals),
+            0,
         ],
     )
     campaign_id, created_at = cur.fetchone()
-
-    for deal in deals:
-        parcel_id = deal.get("parcel_id")
-        if parcel_id is not None:
-            parcel_id = str(parcel_id)
-        cur.execute(
-            """
-            INSERT INTO campaign_properties (campaign_id, parcel_id)
-            VALUES (%s, %s)
-            """,
-            [campaign_id, parcel_id],
-        )
 
     conn.commit()
     cur.close()
@@ -616,7 +567,7 @@ def create_campaign(payload: CampaignCreateRequest):
         "id": campaign_id,
         "name": name,
         "created_at": created_at,
-        "results_count": len(deals),
+        "results_count": 0,
         "tracker_path": f"/t/{tracker_slug}",
     }
 
@@ -680,35 +631,6 @@ def get_campaign(campaign_id: int):
         conn.close()
         raise HTTPException(status_code=404, detail="Campaign not found.")
 
-    cur.execute(
-        """
-        SELECT
-            p.parcel_id,
-            p.address,
-            p.muni,
-            p.year_built,
-            p.assessed_value,
-            p.total_assessed_value,
-            p.owners_hidename,
-            p.owners_name_1,
-            p.owners_name_2,
-            p.ownership_change_date,
-            p.mail_address_1,
-            p.mail_address_2,
-            p.mail_address_3,
-            p.deal_score,
-            p.sale_type,
-            p.recent_divorce,
-            p.divorce_case_status,
-            p.divorce_date_opened
-        FROM campaign_properties cp
-        JOIN properties p ON p.parcel_id = cp.parcel_id
-        WHERE cp.campaign_id = %s
-        ORDER BY cp.id ASC
-        """,
-        [campaign_id],
-    )
-    deals = [_row_to_deal(row) for row in cur.fetchall()]
     cur.close()
     conn.close()
     return {
@@ -718,7 +640,6 @@ def get_campaign(campaign_id: int):
         "results_count": campaign[3],
         "tracker_path": f"/t/{campaign[4]}",
         "visitors": campaign[5],
-        "results": deals,
     }
 
 
