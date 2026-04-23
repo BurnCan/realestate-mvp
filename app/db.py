@@ -225,7 +225,13 @@ def ensure_campaign_schema(conn):
         """
         ALTER TABLE campaigns
         ALTER COLUMN results_count TYPE INT
-            USING COALESCE(results_count, 0)::INT
+            USING (
+                CASE
+                    WHEN TRIM(COALESCE(results_count::TEXT, '')) ~ '^-?\\d+$'
+                        THEN TRIM(results_count::TEXT)::INT
+                    ELSE 0
+                END
+            )
         """
     )
     cur.execute(
