@@ -192,6 +192,62 @@ def ensure_campaign_schema(conn):
             f"ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS {column} {column_type}"
         )
 
+    # Backward compatibility for older deployments that created these columns
+    # with more permissive types before JSON snapshots were introduced.
+    cur.execute(
+        """
+        ALTER TABLE campaigns
+        ALTER COLUMN filters_snapshot TYPE JSONB
+            USING COALESCE(to_jsonb(filters_snapshot), '{}'::JSONB)
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE campaigns
+        ALTER COLUMN filters_snapshot SET DEFAULT '{}'::JSONB
+        """
+    )
+    cur.execute(
+        """
+        UPDATE campaigns
+        SET filters_snapshot = '{}'::JSONB
+        WHERE filters_snapshot IS NULL
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE campaigns
+        ALTER COLUMN filters_snapshot SET NOT NULL
+        """
+    )
+
+    cur.execute(
+        """
+        ALTER TABLE campaigns
+        ALTER COLUMN results_count TYPE INT
+            USING COALESCE(results_count, 0)::INT
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE campaigns
+        ALTER COLUMN results_count SET DEFAULT 0
+        """
+    )
+    cur.execute(
+        """
+        UPDATE campaigns
+        SET results_count = 0
+        WHERE results_count IS NULL
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE campaigns
+        ALTER COLUMN results_count SET NOT NULL
+        """
+    )
+
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS campaign_properties (
