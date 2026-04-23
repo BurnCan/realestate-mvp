@@ -662,6 +662,11 @@ const DealsDashboard = () => {
     try {
       const payload = {
         name: name.trim(),
+        parcel_ids: [...new Set(
+          deals
+            .map((deal) => String(deal?.parcel_id || "").trim())
+            .filter(Boolean),
+        )],
         munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
         min_score: minScore || 0,
         min_year_built: minYearBuilt ? Number(minYearBuilt) : undefined,
