@@ -672,10 +672,18 @@ const DealsDashboard = () => {
       const campaignId = response?.data?.id;
       if (campaignId) {
         window.history.pushState({}, "", `/campaigns/${campaignId}`);
-        window.dispatchEvent(new PopStateEvent("popstate"));
+        // Use a generic Event for broader browser compatibility.
+        window.dispatchEvent(new Event("popstate"));
+      } else {
+        setError("Could not create campaign snapshot.");
       }
-    } catch {
-      setError("Could not create campaign snapshot.");
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      if (typeof detail === "string" && detail.trim()) {
+        setError(`Could not create campaign snapshot: ${detail}`);
+      } else {
+        setError("Could not create campaign snapshot.");
+      }
     } finally {
       setCreatingCampaign(false);
     }
