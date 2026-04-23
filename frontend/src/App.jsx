@@ -298,6 +298,12 @@ const Navigation = ({ currentPath, navigate }) => (
     >
       Divorce Cases
     </button>
+    <button
+      onClick={() => navigate("/campaigns")}
+      style={{ fontWeight: currentPath.startsWith("/campaigns") ? "bold" : "normal" }}
+    >
+      Campaigns
+    </button>
   </div>
 );
 
@@ -312,6 +318,7 @@ const DealsDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
   const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
@@ -383,6 +390,7 @@ const DealsDashboard = () => {
           bank_owned_only: bankOwnedOnly || undefined,
           sheriff_sale_only: sheriffSaleOnly || undefined,
           recent_divorce_only: recentDivorceOnly || undefined,
+          owner_occupant_only: ownerOccupantOnly || undefined,
           limit: 50,
           page: pageNumber,
         },
@@ -640,6 +648,39 @@ const DealsDashboard = () => {
     }
   };
 
+  const createCampaignFromCurrentFilters = async () => {
+    const name = window.prompt("Enter a campaign name:");
+    if (!name || !name.trim()) return;
+    setCreatingCampaign(true);
+    setError("");
+    try {
+      const payload = {
+        name: name.trim(),
+        munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
+        min_score: minScore || 0,
+        min_year_built: minYearBuilt ? Number(minYearBuilt) : undefined,
+        max_year_built: maxYearBuilt ? Number(maxYearBuilt) : undefined,
+        distressed_only: showDistressedOnly,
+        bank_owned_only: showBankOwnedOnly,
+        sheriff_sale_only: showSheriffSaleOnly,
+        owner_occupant_only: showOwnerOccupantOnly,
+        recent_divorce_only: showRecentDivorceOnly,
+        search_query: isSearchMode && search.trim() ? search.trim() : undefined,
+        search_mode: searchMode,
+      };
+      const response = await axios.post(`${API}/campaigns`, payload);
+      const campaignId = response?.data?.id;
+      if (campaignId) {
+        window.history.pushState({}, "", `/campaigns/${campaignId}`);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+    } catch {
+      setError("Could not create campaign snapshot.");
+    } finally {
+      setCreatingCampaign(false);
+    }
+  };
+
   const toggleMunicipality = (code) => {
     setSelectedMunis((current) => (
       current.includes(code)
@@ -781,6 +822,9 @@ const DealsDashboard = () => {
           <button onClick={exportFilteredDealsToCsv} disabled={exporting}>
             {exporting ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
           </button>
+          <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
+            {creatingCampaign ? "Creating Campaign..." : "Create Campaign Snapshot"}
+          </button>
         </div>
       </fieldset>
 
@@ -882,8 +926,100 @@ const DivorceDashboard = () => {
 
 const getCurrentPath = () => {
   const path = window.location.pathname || "/";
+  if (path.startsWith("/campaigns")) return path;
   if (path === "/divorces") return "/divorces";
   return "/";
+};
+
+const CampaignsDashboard = ({ navigate }) => {
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    axios
+      .get(`${API}/campaigns`)
+      .then((res) => setCampaigns(res.data.results || []))
+      .catch(() => setError("Could not load campaigns."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
+      <h1>📬 Campaigns</h1>
+      {loading && <p>Loading campaigns...</p>}
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {!loading && !campaigns.length && <p>No campaigns yet.</p>}
+      {!!campaigns.length && (
+        <table width="100%" border="1" cellPadding="8">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Created</th>
+              <th>Snapshot Results</th>
+              <th>Visitors</th>
+              <th>Tracker URL</th>
+            </tr>
+          </thead>
+          <tbody>
+            {campaigns.map((campaign) => (
+              <tr key={campaign.id}>
+                <td>
+                  <button onClick={() => navigate(`/campaigns/${campaign.id}`)}>
+                    {campaign.name}
+                  </button>
+                </td>
+                <td>{formatOwnershipChangeDate(campaign.created_at)}</td>
+                <td>{campaign.results_count}</td>
+                <td>{campaign.visitors}</td>
+                <td>
+                  <code>{`${window.location.origin}${campaign.tracker_path}`}</code>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
+
+const CampaignDetailDashboard = ({ campaignId }) => {
+  const [campaign, setCampaign] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!campaignId) return;
+    setLoading(true);
+    setError("");
+    axios
+      .get(`${API}/campaigns/${campaignId}`)
+      .then((res) => setCampaign(res.data))
+      .catch(() => setError("Could not load campaign details."))
+      .finally(() => setLoading(false));
+  }, [campaignId]);
+
+  return (
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
+      {loading && <p>Loading campaign...</p>}
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      {campaign && (
+        <>
+          <h1>📬 {campaign.name}</h1>
+          <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
+          <p>Visitors via tracker: <b>{campaign.visitors}</b></p>
+          <p>Snapshot results: <b>{campaign.results_count}</b></p>
+          <p>
+            Tracker URL: <code>{`${window.location.origin}${campaign.tracker_path}`}</code>
+          </p>
+          <DealsTable deals={campaign.results || []} />
+        </>
+      )}
+    </div>
+  );
 };
 
 export default function App() {
@@ -904,7 +1040,12 @@ export default function App() {
   return (
     <>
       <Navigation currentPath={currentPath} navigate={navigate} />
-      {currentPath === "/divorces" ? <DivorceDashboard /> : <DealsDashboard />}
+      {currentPath === "/divorces" && <DivorceDashboard />}
+      {currentPath === "/" && <DealsDashboard />}
+      {currentPath === "/campaigns" && <CampaignsDashboard navigate={navigate} />}
+      {currentPath.startsWith("/campaigns/") && (
+        <CampaignDetailDashboard campaignId={currentPath.split("/")[2]} />
+      )}
     </>
   );
 }

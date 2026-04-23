@@ -1,17 +1,43 @@
 import csv
+import json
 import logging
 import re
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 from psycopg2 import OperationalError
 
-from .db import ensure_divorce_schema, ensure_properties_schema, get_conn
+from .db import (
+    ensure_campaign_schema,
+    ensure_divorce_schema,
+    ensure_properties_schema,
+    get_conn,
+)
 
 app = FastAPI()
 logger = logging.getLogger(__name__)
+
+
+class CampaignCreateRequest(BaseModel):
+    name: str
+    target_url: str | None = None
+    muni: str | None = None
+    munis: str | None = None
+    min_score: float = 0
+    min_year_built: int | None = None
+    max_year_built: int | None = None
+    distressed_only: bool = False
+    bank_owned_only: bool = False
+    sheriff_sale_only: bool = False
+    owner_occupant_only: bool = False
+    recent_divorce_only: bool = False
+    search_query: str | None = None
+    search_mode: str = "all"
 
 
 def _normalize_text(value: str | None) -> str:
@@ -106,6 +132,147 @@ def _muni_filter_candidates_from_list(munis: str | None) -> list[str]:
     return sorted(normalized)
 
 
+def _row_to_deal(row: tuple) -> dict:
+    return {
+        "parcel_id": row[0],
+        "address": row[1],
+        "muni": row[2],
+        "year_built": row[3],
+        "assessed_value": row[4],
+        "total_assessed_value": row[5],
+        "owners_hidename": row[6],
+        "owners_name_1": row[7],
+        "owners_name_2": row[8],
+        "ownership_change_date": row[9],
+        "mail_address_1": row[10],
+        "mail_address_2": row[11],
+        "mail_address_3": row[12],
+        "deal_score": row[13],
+        "sale_type": row[14],
+        "recent_divorce": row[15],
+        "divorce_case_status": row[16],
+        "divorce_date_opened": row[17],
+        "is_sheriff_sale": is_sheriff_sale_property(row[1], row[2]),
+    }
+
+
+def _build_filtered_deals_query(
+    *,
+    muni: str | None = None,
+    munis: str | None = None,
+    min_score: float = 0,
+    min_year_built: int | None = None,
+    max_year_built: int | None = None,
+    distressed_only: bool = False,
+    bank_owned_only: bool = False,
+    sheriff_sale_only: bool = False,
+    owner_occupant_only: bool = False,
+    recent_divorce_only: bool = False,
+) -> tuple[str, list]:
+    base_query = """
+        SELECT
+            parcel_id,
+            address,
+            muni,
+            year_built,
+            assessed_value,
+            total_assessed_value,
+            owners_hidename,
+            owners_name_1,
+            owners_name_2,
+            ownership_change_date,
+            mail_address_1,
+            mail_address_2,
+            mail_address_3,
+            deal_score,
+            sale_type,
+            recent_divorce,
+            divorce_case_status,
+            divorce_date_opened
+        FROM properties
+        WHERE deal_score IS NOT NULL
+    """
+
+    params: list = []
+    muni_candidates = sorted({
+        *_muni_filter_candidates(muni),
+        *_muni_filter_candidates_from_list(munis),
+    })
+    if muni_candidates:
+        if len(muni_candidates) == 1:
+            base_query += " AND TRIM(COALESCE(muni, '')) = %s"
+            params.append(muni_candidates[0])
+        else:
+            base_query += " AND TRIM(COALESCE(muni, '')) = ANY(%s)"
+            params.append(muni_candidates)
+
+    if min_score is not None:
+        base_query += " AND deal_score >= %s"
+        params.append(min_score)
+    if min_year_built is not None:
+        base_query += " AND year_built >= %s"
+        params.append(min_year_built)
+    if max_year_built is not None:
+        base_query += " AND year_built <= %s"
+        params.append(max_year_built)
+
+    distressed_condition = """
+        (
+            LOWER(COALESCE(owners_name_1, '')) LIKE '%%secretary%%'
+            OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%secretary%%'
+            OR LOWER(COALESCE(owners_name_1, '')) LIKE '%%housing%%'
+            OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%housing%%'
+        )
+        AND NOT (
+            LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+            OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+        )
+    """
+    bank_owned_condition = """
+        (
+            LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+            OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
+        )
+    """
+
+    status_conditions: list[str] = []
+    if distressed_only:
+        status_conditions.append(f"({distressed_condition})")
+    if bank_owned_only:
+        status_conditions.append(f"({bank_owned_condition})")
+    if sheriff_sale_only:
+        sheriff_matches = sorted(get_sheriff_sale_matches())
+        if sheriff_matches:
+            status_conditions.append(
+                "REGEXP_REPLACE(LOWER(COALESCE(address, '')), '[^a-z0-9 ]', '', 'g') = ANY(%s)"
+            )
+            params.append(sheriff_matches)
+    if recent_divorce_only:
+        status_conditions.append("COALESCE(recent_divorce, FALSE) IS TRUE")
+    if owner_occupant_only:
+        status_conditions.append(
+            """
+            (
+                LOWER(TRIM(COALESCE(address, ''))) <> ''
+                AND LOWER(TRIM(CONCAT_WS(' ', mail_address_1, mail_address_2, mail_address_3))) <> ''
+                AND (
+                    LOWER(TRIM(CONCAT_WS(' ', mail_address_1, mail_address_2, mail_address_3)))
+                        LIKE CONCAT('%%', LOWER(TRIM(COALESCE(address, ''))), '%%')
+                    OR LOWER(TRIM(COALESCE(address, '')))
+                        LIKE CONCAT('%%', LOWER(TRIM(CONCAT_WS(' ', mail_address_1, mail_address_2, mail_address_3))), '%%')
+                )
+            )
+            """
+        )
+
+    if status_conditions:
+        base_query += " AND (" + " OR ".join(status_conditions) + ")"
+    elif sheriff_sale_only:
+        base_query += " AND 1 = 0"
+
+    return base_query, params
+
+
 @lru_cache(maxsize=1)
 def get_sheriff_sale_matches() -> set[str]:
     csv_files = sorted(Path(".").glob("*.csv"), reverse=True)
@@ -156,6 +323,7 @@ def prime_database_schema() -> None:
     try:
         ensure_properties_schema(conn)
         ensure_divorce_schema(conn)
+        ensure_campaign_schema(conn)
     except Exception:
         logger.exception("Startup schema checks failed.")
     finally:
@@ -182,105 +350,23 @@ def get_deals(
     distressed_only: bool = False,
     bank_owned_only: bool = False,
     sheriff_sale_only: bool = False,
+    owner_occupant_only: bool = False,
     recent_divorce_only: bool = False,
 ):
     conn = get_conn()
     cur = conn.cursor()
-
-    base_query = """
-        SELECT
-            parcel_id,
-            address,
-            muni,
-            year_built,
-            assessed_value,
-            total_assessed_value,
-            owners_hidename,
-            owners_name_1,
-            owners_name_2,
-            ownership_change_date,
-            mail_address_1,
-            mail_address_2,
-            mail_address_3,
-            deal_score,
-            sale_type,
-            recent_divorce,
-            divorce_case_status,
-            divorce_date_opened
-        FROM properties
-        WHERE deal_score IS NOT NULL
-    """
-
-    params = []
-
-    muni_candidates = sorted({
-        *_muni_filter_candidates(muni),
-        *_muni_filter_candidates_from_list(munis),
-    })
-    if muni_candidates:
-        if len(muni_candidates) == 1:
-            base_query += " AND TRIM(COALESCE(muni, '')) = %s"
-            params.append(muni_candidates[0])
-        else:
-            base_query += " AND TRIM(COALESCE(muni, '')) = ANY(%s)"
-            params.append(muni_candidates)
-
-    if min_score is not None:
-        base_query += " AND deal_score >= %s"
-        params.append(min_score)
-
-    if min_year_built is not None:
-        base_query += " AND year_built >= %s"
-        params.append(min_year_built)
-
-    if max_year_built is not None:
-        base_query += " AND year_built <= %s"
-        params.append(max_year_built)
-
-    distressed_condition = """
-        (
-            LOWER(COALESCE(owners_name_1, '')) LIKE '%%secretary%%'
-            OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%secretary%%'
-            OR LOWER(COALESCE(owners_name_1, '')) LIKE '%%housing%%'
-            OR LOWER(COALESCE(owners_name_2, '')) LIKE '%%housing%%'
-        )
-        AND NOT (
-            LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-            OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-        )
-    """
-
-    bank_owned_condition = """
-        (
-            LOWER(COALESCE(owners_name_1, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-            OR LOWER(COALESCE(owners_name_2, '')) ~ '(^|[^a-z])bank([^a-z]|$)'
-        )
-    """
-
-    status_conditions: list[str] = []
-
-    if distressed_only:
-        status_conditions.append(f"({distressed_condition})")
-
-    if bank_owned_only:
-        status_conditions.append(f"({bank_owned_condition})")
-
-    if sheriff_sale_only:
-        sheriff_matches = sorted(get_sheriff_sale_matches())
-        if sheriff_matches:
-            status_conditions.append(
-                "REGEXP_REPLACE(LOWER(COALESCE(address, '')), '[^a-z0-9 ]', '', 'g') = ANY(%s)"
-            )
-            params.append(sheriff_matches)
-
-    if recent_divorce_only:
-        status_conditions.append("COALESCE(recent_divorce, FALSE) IS TRUE")
-
-    if status_conditions:
-        base_query += " AND (" + " OR ".join(status_conditions) + ")"
-    elif sheriff_sale_only:
-        # Sheriff sale filter selected but no sheriff addresses were found.
-        base_query += " AND 1 = 0"
+    base_query, params = _build_filtered_deals_query(
+        muni=muni,
+        munis=munis,
+        min_score=min_score,
+        min_year_built=min_year_built,
+        max_year_built=max_year_built,
+        distressed_only=distressed_only,
+        bank_owned_only=bank_owned_only,
+        sheriff_sale_only=sheriff_sale_only,
+        owner_occupant_only=owner_occupant_only,
+        recent_divorce_only=recent_divorce_only,
+    )
     page = max(page, 1)
     limit = max(limit, 1)
     offset = (page - 1) * limit
@@ -298,30 +384,7 @@ def get_deals(
     cur.close()
     conn.close()
 
-    deals = [
-        {
-            "parcel_id": r[0],
-            "address": r[1],
-            "muni": r[2],
-            "year_built": r[3],
-            "assessed_value": r[4],
-            "total_assessed_value": r[5],
-            "owners_hidename": r[6],
-            "owners_name_1": r[7],
-            "owners_name_2": r[8],
-            "ownership_change_date": r[9],
-            "mail_address_1": r[10],
-            "mail_address_2": r[11],
-            "mail_address_3": r[12],
-            "deal_score": r[13],
-            "sale_type": r[14],
-            "recent_divorce": r[15],
-            "divorce_case_status": r[16],
-            "divorce_date_opened": r[17],
-            "is_sheriff_sale": is_sheriff_sale_property(r[1], r[2]),
-        }
-        for r in rows
-    ]
+    deals = [_row_to_deal(r) for r in rows]
 
     return {
         "results": deals,
@@ -403,30 +466,294 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
 
     return {
         "results": [
+            _row_to_deal(r)
+            for r in rows
+        ]
+    }
+
+
+def _search_rows(cur, q: str, mode: str, limit: int = 100000):
+    normalized_mode = (mode or "all").strip().lower()
+    owner_name_clause, owner_name_params = _build_owner_name_clause(q)
+    owner_query = _normalize_owner_search_text(q)
+    where_clause = ""
+    params: list[str | int] = []
+
+    if normalized_mode == "address":
+        where_clause = "address ILIKE %s"
+        params = [f"%{q}%"]
+    elif normalized_mode in {"owner", "owner_1", "owner_2"}:
+        where_clause = """
+            (
+                owners_name_1 ILIKE %s
+                OR owners_name_2 ILIKE %s
+            )
+        """
+        params = [f"%{owner_query}%", f"%{owner_query}%"]
+    else:
+        where_clause = f"""
+            (
+                address ILIKE %s
+                OR owners_name_1 ILIKE %s
+                OR owners_name_2 ILIKE %s
+                OR owners_hidename ILIKE %s
+                {owner_name_clause}
+            )
+        """
+        params = [f"%{q}%", f"%{owner_query}%", f"%{owner_query}%", f"%{owner_query}%", *owner_name_params]
+
+    cur.execute(
+        f"""
+        SELECT
+            parcel_id,
+            address,
+            muni,
+            year_built,
+            assessed_value,
+            total_assessed_value,
+            owners_hidename,
+            owners_name_1,
+            owners_name_2,
+            ownership_change_date,
+            mail_address_1,
+            mail_address_2,
+            mail_address_3,
+            deal_score,
+            sale_type,
+            recent_divorce,
+            divorce_case_status,
+            divorce_date_opened
+        FROM properties
+        WHERE deal_score IS NOT NULL
+          AND {where_clause}
+        ORDER BY deal_score DESC
+        LIMIT %s
+        """,
+        [*params, limit],
+    )
+    return cur.fetchall()
+
+
+@app.post("/campaigns")
+def create_campaign(payload: CampaignCreateRequest):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Campaign name is required.")
+
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+
+    if payload.search_query and payload.search_query.strip():
+        rows = _search_rows(cur, payload.search_query.strip(), payload.search_mode, limit=100000)
+        results = [_row_to_deal(r) for r in rows]
+        filtered = []
+        muni_candidates = sorted({
+            *_muni_filter_candidates(payload.muni),
+            *_muni_filter_candidates_from_list(payload.munis),
+        })
+        for deal in results:
+            if muni_candidates and str((deal.get("muni") or "")).strip() not in muni_candidates:
+                continue
+            score = deal.get("deal_score")
+            if score is None or score < payload.min_score:
+                continue
+            year_built = deal.get("year_built")
+            if payload.min_year_built is not None and (year_built is None or year_built < payload.min_year_built):
+                continue
+            if payload.max_year_built is not None and (year_built is None or year_built > payload.max_year_built):
+                continue
+            filtered.append(deal)
+        deals = filtered
+    else:
+        query, params = _build_filtered_deals_query(
+            muni=payload.muni,
+            munis=payload.munis,
+            min_score=payload.min_score,
+            min_year_built=payload.min_year_built,
+            max_year_built=payload.max_year_built,
+            distressed_only=payload.distressed_only,
+            bank_owned_only=payload.bank_owned_only,
+            sheriff_sale_only=payload.sheriff_sale_only,
+            owner_occupant_only=payload.owner_occupant_only,
+            recent_divorce_only=payload.recent_divorce_only,
+        )
+        cur.execute(f"{query} ORDER BY deal_score DESC")
+        deals = [_row_to_deal(r) for r in cur.fetchall()]
+
+    tracker_slug = secrets.token_urlsafe(6)
+    cur.execute(
+        """
+        INSERT INTO campaigns (name, tracker_slug, filters_snapshot, results_count)
+        VALUES (%s, %s, %s::jsonb, %s)
+        RETURNING id, created_at
+        """,
+        [
+            name,
+            tracker_slug,
+            payload.model_dump_json(),
+            len(deals),
+        ],
+    )
+    campaign_id, created_at = cur.fetchone()
+
+    for deal in deals:
+        cur.execute(
+            """
+            INSERT INTO campaign_properties (campaign_id, parcel_id, snapshot_data)
+            VALUES (%s, %s, %s::jsonb)
+            """,
+            [campaign_id, deal.get("parcel_id"), json.dumps(deal, default=str)],
+        )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {
+        "id": campaign_id,
+        "name": name,
+        "created_at": created_at,
+        "results_count": len(deals),
+        "tracker_path": f"/t/{tracker_slug}",
+    }
+
+
+@app.get("/campaigns")
+def list_campaigns():
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    cur.execute(
+        """
+        SELECT
+            c.id,
+            c.name,
+            c.created_at,
+            c.results_count,
+            c.tracker_slug,
+            COUNT(cv.id) AS visitors
+        FROM campaigns c
+        LEFT JOIN campaign_visits cv ON cv.campaign_id = c.id
+        GROUP BY c.id
+        ORDER BY c.created_at DESC
+        """
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {
+        "results": [
             {
-                "parcel_id": r[0],
-                "address": r[1],
-                "muni": r[2],
-                "year_built": r[3],
-                "assessed_value": r[4],
-                "total_assessed_value": r[5],
-                "owners_hidename": r[6],
-                "owners_name_1": r[7],
-                "owners_name_2": r[8],
-                "ownership_change_date": r[9],
-                "mail_address_1": r[10],
-                "mail_address_2": r[11],
-                "mail_address_3": r[12],
-                "deal_score": r[13],
-                "sale_type": r[14],
-                "recent_divorce": r[15],
-                "divorce_case_status": r[16],
-                "divorce_date_opened": r[17],
-                "is_sheriff_sale": is_sheriff_sale_property(r[1], r[2]),
+                "id": r[0],
+                "name": r[1],
+                "created_at": r[2],
+                "results_count": r[3],
+                "tracker_path": f"/t/{r[4]}",
+                "visitors": r[5],
             }
             for r in rows
         ]
     }
+
+
+@app.get("/campaigns/{campaign_id}")
+def get_campaign(campaign_id: int):
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    cur.execute(
+        """
+        SELECT c.id, c.name, c.created_at, c.results_count, c.tracker_slug, COUNT(cv.id) AS visitors
+        FROM campaigns c
+        LEFT JOIN campaign_visits cv ON cv.campaign_id = c.id
+        WHERE c.id = %s
+        GROUP BY c.id
+        """,
+        [campaign_id],
+    )
+    campaign = cur.fetchone()
+    if not campaign:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+
+    cur.execute(
+        """
+        SELECT snapshot_data
+        FROM campaign_properties
+        WHERE campaign_id = %s
+        ORDER BY id ASC
+        """,
+        [campaign_id],
+    )
+    deals = [row[0] for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return {
+        "id": campaign[0],
+        "name": campaign[1],
+        "created_at": campaign[2],
+        "results_count": campaign[3],
+        "tracker_path": f"/t/{campaign[4]}",
+        "visitors": campaign[5],
+        "results": deals,
+    }
+
+
+@app.get("/t/{tracker_slug}", response_class=HTMLResponse)
+def tracker_redirect(tracker_slug: str, request: Request):
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    cur.execute(
+        "SELECT id FROM campaigns WHERE tracker_slug = %s",
+        [tracker_slug],
+    )
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Tracker not found.")
+    campaign_id = row[0]
+
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip_address = (forwarded.split(",")[0].strip() if forwarded else "") or (
+        request.client.host if request.client else ""
+    )
+    cur.execute(
+        """
+        INSERT INTO campaign_visits (campaign_id, ip_address, user_agent, referer)
+        VALUES (%s, %s, %s, %s)
+        """,
+        [
+            campaign_id,
+            ip_address,
+            request.headers.get("user-agent"),
+            request.headers.get("referer"),
+        ],
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    destination = f"/campaigns/{campaign_id}"
+    return HTMLResponse(
+        content=f"""
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta http-equiv="refresh" content="0; url={destination}" />
+            <title>Redirecting…</title>
+          </head>
+          <body>
+            <p>Redirecting to campaign page…</p>
+            <p><a href="{destination}">Continue</a></p>
+            <script>window.location.replace("{destination}");</script>
+          </body>
+        </html>
+        """
+    )
 
 
 @app.get("/divorce-cases")
