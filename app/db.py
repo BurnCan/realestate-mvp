@@ -101,6 +101,7 @@ REQUIRED_DIVORCE_COLUMNS = {
 
 REQUIRED_CAMPAIGN_COLUMNS = {
     "name": "TEXT",
+    "slug": "TEXT UNIQUE",
     "tracker_slug": "TEXT UNIQUE",
     "filters_snapshot": "JSONB NOT NULL DEFAULT '{}'::JSONB",
     "results_count": "INT NOT NULL DEFAULT 0",

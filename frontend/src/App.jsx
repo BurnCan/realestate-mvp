@@ -141,6 +141,37 @@ const matchesYearBuiltRange = ({ deal, minYearBuilt, maxYearBuilt }) => {
   return true;
 };
 
+const doesDealMatchFrontendFilters = ({
+  deal,
+  selectedMunis = [],
+  minScore = 0,
+  distressedOnly = false,
+  bankOwnedOnly = false,
+  sheriffSaleOnly = false,
+  ownerOccupantOnly = false,
+  recentDivorceOnly = false,
+  parsedMinYearBuilt,
+  parsedMaxYearBuilt,
+  enforceMunicipalityCheck = false,
+  enforceMinScoreCheck = false,
+}) => (
+  matchesStatusFilters({
+    deal,
+    distressedOnly,
+    bankOwnedOnly,
+    sheriffSaleOnly,
+    ownerOccupantOnly,
+    recentDivorceOnly,
+  })
+  && matchesYearBuiltRange({
+    deal,
+    minYearBuilt: parsedMinYearBuilt,
+    maxYearBuilt: parsedMaxYearBuilt,
+  })
+  && (!enforceMunicipalityCheck || matchesMunicipality(deal, selectedMunis))
+  && (!enforceMinScoreCheck || (deal.deal_score ?? 0) >= minScore)
+);
+
 const formatMailingAddress = (deal) => (
   [deal.mail_address_1, deal.mail_address_2, deal.mail_address_3]
     .filter((line) => line && String(line).trim())
@@ -508,35 +539,6 @@ const DealsDashboard = () => {
     });
   };
 
-  const doesDealMatchFrontendFilters = ({
-    deal,
-    distressedOnly,
-    bankOwnedOnly,
-    sheriffSaleOnly,
-    ownerOccupantOnly,
-    recentDivorceOnly,
-    parsedMinYearBuilt,
-    parsedMaxYearBuilt,
-    enforceMunicipalityCheck = false,
-    enforceMinScoreCheck = false,
-  }) => (
-    matchesStatusFilters({
-      deal,
-      distressedOnly,
-      bankOwnedOnly,
-      sheriffSaleOnly,
-      ownerOccupantOnly,
-      recentDivorceOnly,
-    })
-    && matchesYearBuiltRange({
-      deal,
-      minYearBuilt: parsedMinYearBuilt,
-      maxYearBuilt: parsedMaxYearBuilt,
-    })
-    && (!enforceMunicipalityCheck || matchesMunicipality(deal, selectedMunis))
-    && (!enforceMinScoreCheck || (deal.deal_score ?? 0) >= minScore)
-  );
-
   const exportFilteredDealsToCsv = async () => {
     setExporting(true);
     setError("");
@@ -561,6 +563,8 @@ const DealsDashboard = () => {
         const results = response.data.results || [];
         allDeals = results.filter((deal) => doesDealMatchFrontendFilters({
           deal,
+          selectedMunis,
+          minScore,
           distressedOnly,
           bankOwnedOnly,
           sheriffSaleOnly,
@@ -597,6 +601,8 @@ const DealsDashboard = () => {
           const results = response.data.results || [];
           allDeals.push(...results.filter((deal) => doesDealMatchFrontendFilters({
             deal,
+            selectedMunis,
+            minScore,
             distressedOnly,
             bankOwnedOnly,
             sheriffSaleOnly,
@@ -669,9 +675,9 @@ const DealsDashboard = () => {
         search_mode: searchMode,
       };
       const response = await axios.post(`${API}/campaigns`, payload);
-      const campaignId = response?.data?.id ?? response?.data?.campaign_id;
-      if (campaignId !== undefined && campaignId !== null && String(campaignId).trim() !== "") {
-        window.history.pushState({}, "", `/campaigns/${campaignId}`);
+      const campaignPath = response?.data?.slug || response?.data?.id || response?.data?.campaign_id;
+      if (campaignPath !== undefined && campaignPath !== null && String(campaignPath).trim() !== "") {
+        window.history.pushState({}, "", `/campaigns/${campaignPath}`);
         // Use a generic Event for broader browser compatibility.
         window.dispatchEvent(new Event("popstate"));
       } else {
@@ -972,7 +978,7 @@ const CampaignsDashboard = ({ navigate }) => {
             {campaigns.map((campaign) => (
               <tr key={campaign.id}>
                 <td>
-                  <button onClick={() => navigate(`/campaigns/${campaign.id}`)}>
+                  <button onClick={() => navigate(`/campaigns/${campaign.slug || campaign.id}`)}>
                     {campaign.name}
                   </button>
                 </td>
@@ -986,21 +992,83 @@ const CampaignsDashboard = ({ navigate }) => {
   );
 };
 
-const CampaignDetailDashboard = ({ campaignId }) => {
+const CampaignDetailDashboard = ({ campaignIdentifier }) => {
   const [campaign, setCampaign] = useState(null);
+  const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!campaignId) return;
-    setLoading(true);
-    setError("");
-    axios
-      .get(`${API}/campaigns/${campaignId}`)
-      .then((res) => setCampaign(res.data))
-      .catch(() => setError("Could not load campaign details."))
-      .finally(() => setLoading(false));
-  }, [campaignId]);
+    if (!campaignIdentifier) return;
+    const fetchCampaignAndDeals = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const campaignResponse = await axios.get(`${API}/campaigns/${campaignIdentifier}`);
+        const campaignData = campaignResponse.data;
+        setCampaign(campaignData);
+        const snapshot = campaignData?.filters_snapshot || {};
+        const parsedMinYearBuilt = snapshot?.min_year_built ? Number(snapshot.min_year_built) : undefined;
+        const parsedMaxYearBuilt = snapshot?.max_year_built ? Number(snapshot.max_year_built) : undefined;
+        const selectedMunis = (snapshot?.munis || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+        const minScore = Number(snapshot?.min_score || 0);
+
+        if ((snapshot?.search_query || "").trim()) {
+          const searchResponse = await axios.get(`${API}/search`, {
+            params: {
+              q: snapshot.search_query.trim(),
+              mode: snapshot.search_mode || "all",
+              limit: 2000,
+            },
+          });
+          const filteredDeals = (searchResponse.data.results || []).filter((deal) => (
+            doesDealMatchFrontendFilters({
+              deal,
+              selectedMunis,
+              minScore,
+              distressedOnly: Boolean(snapshot?.distressed_only),
+              bankOwnedOnly: Boolean(snapshot?.bank_owned_only),
+              sheriffSaleOnly: Boolean(snapshot?.sheriff_sale_only),
+              ownerOccupantOnly: Boolean(snapshot?.owner_occupant_only),
+              recentDivorceOnly: Boolean(snapshot?.recent_divorce_only),
+              parsedMinYearBuilt,
+              parsedMaxYearBuilt,
+              enforceMunicipalityCheck: true,
+              enforceMinScoreCheck: true,
+            })
+          ));
+          setDeals(filteredDeals);
+        } else {
+          const response = await axios.get(`${API}/deals`, {
+            params: {
+              munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
+              min_score: minScore,
+              min_year_built: parsedMinYearBuilt,
+              max_year_built: parsedMaxYearBuilt,
+              distressed_only: snapshot?.distressed_only || undefined,
+              bank_owned_only: snapshot?.bank_owned_only || undefined,
+              sheriff_sale_only: snapshot?.sheriff_sale_only || undefined,
+              recent_divorce_only: snapshot?.recent_divorce_only || undefined,
+              owner_occupant_only: snapshot?.owner_occupant_only || undefined,
+              limit: 500,
+              page: 1,
+            },
+          });
+          setDeals(response.data.results || []);
+        }
+      } catch {
+        setCampaign(null);
+        setDeals([]);
+        setError("Could not load campaign details.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCampaignAndDeals();
+  }, [campaignIdentifier]);
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
@@ -1010,7 +1078,8 @@ const CampaignDetailDashboard = ({ campaignId }) => {
         <>
           <h1>📬 {campaign.name}</h1>
           <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
-          <p>Campaign created successfully.</p>
+          <p>Showing {deals.length.toLocaleString()} matching properties from saved filters.</p>
+          <DealsTable deals={deals} />
         </>
       )}
     </div>
@@ -1039,7 +1108,7 @@ export default function App() {
       {currentPath === "/" && <DealsDashboard />}
       {currentPath === "/campaigns" && <CampaignsDashboard navigate={navigate} />}
       {currentPath.startsWith("/campaigns/") && (
-        <CampaignDetailDashboard campaignId={currentPath.split("/")[2]} />
+        <CampaignDetailDashboard campaignIdentifier={currentPath.split("/")[2]} />
       )}
     </>
   );

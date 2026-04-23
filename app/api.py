@@ -2,6 +2,7 @@ import csv
 import logging
 import re
 import secrets
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
@@ -37,6 +38,12 @@ class CampaignCreateRequest(BaseModel):
     recent_divorce_only: bool = False
     search_query: str | None = None
     search_mode: str = "all"
+
+
+def _slugify_campaign_name(name: str) -> str:
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_name.strip().lower()).strip("-")
+    return slug or "campaign"
 
 
 def _normalize_text(value: str | None) -> str:
@@ -533,6 +540,22 @@ def _search_rows(cur, q: str, mode: str, limit: int = 100000):
     return cur.fetchall()
 
 
+def _resolve_campaign_identifier(cur, identifier: str) -> int | None:
+    normalized = (identifier or "").strip()
+    if not normalized:
+        return None
+
+    if normalized.isdigit():
+        cur.execute("SELECT id FROM campaigns WHERE id = %s", [int(normalized)])
+        row = cur.fetchone()
+        if row:
+            return row[0]
+
+    cur.execute("SELECT id FROM campaigns WHERE slug = %s", [normalized.lower()])
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
 @app.post("/campaigns")
 def create_campaign(payload: CampaignCreateRequest):
     name = payload.name.strip()
@@ -543,15 +566,26 @@ def create_campaign(payload: CampaignCreateRequest):
     cur = conn.cursor()
     ensure_campaign_schema(conn)
 
+    base_slug = _slugify_campaign_name(name)
+    slug = base_slug
+    suffix = 2
+    while True:
+        cur.execute("SELECT 1 FROM campaigns WHERE slug = %s", [slug])
+        if not cur.fetchone():
+            break
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+
     tracker_slug = secrets.token_urlsafe(6)
     cur.execute(
         """
-        INSERT INTO campaigns (name, tracker_slug, filters_snapshot, results_count)
-        VALUES (%s, %s, %s::jsonb, %s)
+        INSERT INTO campaigns (name, slug, tracker_slug, filters_snapshot, results_count)
+        VALUES (%s, %s, %s, %s::jsonb, %s)
         RETURNING id, created_at
         """,
         [
             name,
+            slug,
             tracker_slug,
             payload.model_dump_json(),
             0,
@@ -565,6 +599,7 @@ def create_campaign(payload: CampaignCreateRequest):
 
     return {
         "id": campaign_id,
+        "slug": slug,
         "name": name,
         "created_at": created_at,
         "results_count": 0,
@@ -582,6 +617,7 @@ def list_campaigns():
         SELECT
             c.id,
             c.name,
+            c.slug,
             c.created_at,
             c.results_count,
             c.tracker_slug,
@@ -600,24 +636,39 @@ def list_campaigns():
             {
                 "id": r[0],
                 "name": r[1],
-                "created_at": r[2],
-                "results_count": r[3],
-                "tracker_path": f"/t/{r[4]}",
-                "visitors": r[5],
+                "slug": r[2],
+                "created_at": r[3],
+                "results_count": r[4],
+                "tracker_path": f"/t/{r[5]}",
+                "visitors": r[6],
             }
             for r in rows
         ]
     }
 
 
-@app.get("/campaigns/{campaign_id}")
-def get_campaign(campaign_id: int):
+@app.get("/campaigns/{campaign_identifier}")
+def get_campaign(campaign_identifier: str):
     conn = get_conn()
     cur = conn.cursor()
     ensure_campaign_schema(conn)
+    campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
+    if campaign_id is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+
     cur.execute(
         """
-        SELECT c.id, c.name, c.created_at, c.results_count, c.tracker_slug, COUNT(cv.id) AS visitors
+        SELECT
+            c.id,
+            c.name,
+            c.slug,
+            c.created_at,
+            c.results_count,
+            c.tracker_slug,
+            c.filters_snapshot,
+            COUNT(cv.id) AS visitors
         FROM campaigns c
         LEFT JOIN campaign_visits cv ON cv.campaign_id = c.id
         WHERE c.id = %s
@@ -636,10 +687,12 @@ def get_campaign(campaign_id: int):
     return {
         "id": campaign[0],
         "name": campaign[1],
-        "created_at": campaign[2],
-        "results_count": campaign[3],
-        "tracker_path": f"/t/{campaign[4]}",
-        "visitors": campaign[5],
+        "slug": campaign[2],
+        "created_at": campaign[3],
+        "results_count": campaign[4],
+        "tracker_path": f"/t/{campaign[5]}",
+        "filters_snapshot": campaign[6] or {},
+        "visitors": campaign[7],
     }
 
 
@@ -649,7 +702,7 @@ def tracker_redirect(tracker_slug: str, request: Request):
     cur = conn.cursor()
     ensure_campaign_schema(conn)
     cur.execute(
-        "SELECT id FROM campaigns WHERE tracker_slug = %s",
+        "SELECT id, slug FROM campaigns WHERE tracker_slug = %s",
         [tracker_slug],
     )
     row = cur.fetchone()
@@ -657,7 +710,7 @@ def tracker_redirect(tracker_slug: str, request: Request):
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Tracker not found.")
-    campaign_id = row[0]
+    campaign_id, campaign_slug = row
 
     forwarded = request.headers.get("x-forwarded-for", "")
     ip_address = (forwarded.split(",")[0].strip() if forwarded else "") or (
@@ -678,7 +731,7 @@ def tracker_redirect(tracker_slug: str, request: Request):
     conn.commit()
     cur.close()
     conn.close()
-    destination = f"/campaigns/{campaign_id}"
+    destination = f"/campaigns/{campaign_slug or campaign_id}"
     return HTMLResponse(
         content=f"""
         <!doctype html>
