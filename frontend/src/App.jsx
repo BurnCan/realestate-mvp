@@ -660,9 +660,14 @@ const DealsDashboard = () => {
     setCreatingCampaign(true);
     setError("");
     try {
+      const snapshotParcelIds = Array.from(new Set((deals || [])
+        .map((deal) => deal?.parcel_id)
+        .filter((parcelId) => typeof parcelId === "string" && parcelId.trim())));
+
       const payload = {
         name: name.trim(),
         munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
+        parcel_ids: snapshotParcelIds,
         min_score: minScore || 0,
         min_year_built: minYearBuilt ? Number(minYearBuilt) : undefined,
         max_year_built: maxYearBuilt ? Number(maxYearBuilt) : undefined,
@@ -1007,58 +1012,7 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
         const campaignResponse = await axios.get(`${API}/campaigns/${campaignIdentifier}`);
         const campaignData = campaignResponse.data;
         setCampaign(campaignData);
-        const snapshot = campaignData?.filters_snapshot || {};
-        const parsedMinYearBuilt = snapshot?.min_year_built ? Number(snapshot.min_year_built) : undefined;
-        const parsedMaxYearBuilt = snapshot?.max_year_built ? Number(snapshot.max_year_built) : undefined;
-        const selectedMunis = (snapshot?.munis || "")
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean);
-        const minScore = Number(snapshot?.min_score || 0);
-
-        if ((snapshot?.search_query || "").trim()) {
-          const searchResponse = await axios.get(`${API}/search`, {
-            params: {
-              q: snapshot.search_query.trim(),
-              mode: snapshot.search_mode || "all",
-              limit: 2000,
-            },
-          });
-          const filteredDeals = (searchResponse.data.results || []).filter((deal) => (
-            doesDealMatchFrontendFilters({
-              deal,
-              selectedMunis,
-              minScore,
-              distressedOnly: Boolean(snapshot?.distressed_only),
-              bankOwnedOnly: Boolean(snapshot?.bank_owned_only),
-              sheriffSaleOnly: Boolean(snapshot?.sheriff_sale_only),
-              ownerOccupantOnly: Boolean(snapshot?.owner_occupant_only),
-              recentDivorceOnly: Boolean(snapshot?.recent_divorce_only),
-              parsedMinYearBuilt,
-              parsedMaxYearBuilt,
-              enforceMunicipalityCheck: true,
-              enforceMinScoreCheck: true,
-            })
-          ));
-          setDeals(filteredDeals);
-        } else {
-          const response = await axios.get(`${API}/deals`, {
-            params: {
-              munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
-              min_score: minScore,
-              min_year_built: parsedMinYearBuilt,
-              max_year_built: parsedMaxYearBuilt,
-              distressed_only: snapshot?.distressed_only || undefined,
-              bank_owned_only: snapshot?.bank_owned_only || undefined,
-              sheriff_sale_only: snapshot?.sheriff_sale_only || undefined,
-              recent_divorce_only: snapshot?.recent_divorce_only || undefined,
-              owner_occupant_only: snapshot?.owner_occupant_only || undefined,
-              limit: 500,
-              page: 1,
-            },
-          });
-          setDeals(response.data.results || []);
-        }
+        setDeals(campaignData?.deals || []);
       } catch {
         setCampaign(null);
         setDeals([]);
@@ -1078,7 +1032,7 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
         <>
           <h1>📬 {campaign.name}</h1>
           <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
-          <p>Showing {deals.length.toLocaleString()} matching properties from saved filters.</p>
+          <p>Showing {deals.length.toLocaleString()} properties snapshotted at campaign creation.</p>
           <DealsTable deals={deals} />
         </>
       )}

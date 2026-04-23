@@ -1,9 +1,11 @@
 import csv
+import json
 import logging
 import re
 import secrets
 import unicodedata
 from functools import lru_cache
+from itertools import islice
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -38,6 +40,7 @@ class CampaignCreateRequest(BaseModel):
     recent_divorce_only: bool = False
     search_query: str | None = None
     search_mode: str = "all"
+    parcel_ids: list[str] | None = None
 
 
 def _slugify_campaign_name(name: str) -> str:
@@ -540,6 +543,133 @@ def _search_rows(cur, q: str, mode: str, limit: int = 100000):
     return cur.fetchall()
 
 
+
+
+def _row_matches_campaign_filters(row: tuple, payload: CampaignCreateRequest, selected_munis: set[str]) -> bool:
+    deal = _row_to_deal(row)
+
+    if selected_munis and str(deal.get("muni") or "").strip() not in selected_munis:
+        return False
+
+    try:
+        score = float(deal.get("deal_score") or 0)
+    except (TypeError, ValueError):
+        score = 0
+    if score < float(payload.min_score or 0):
+        return False
+
+    year_built = deal.get("year_built")
+    if payload.min_year_built is not None and (year_built is None or year_built < payload.min_year_built):
+        return False
+    if payload.max_year_built is not None and (year_built is None or year_built > payload.max_year_built):
+        return False
+
+    address = _normalize_address(deal.get("address"))
+    mail_parts = [deal.get("mail_address_1"), deal.get("mail_address_2"), deal.get("mail_address_3")]
+    normalized_mail = [_normalize_address(part) for part in mail_parts if part]
+    has_mail_match = bool(address and any(address == candidate for candidate in normalized_mail))
+
+    if payload.distressed_only and deal.get("sale_type") != "distressed":
+        return False
+    if payload.bank_owned_only and deal.get("sale_type") != "bank_owned":
+        return False
+    if payload.sheriff_sale_only and not bool(deal.get("is_sheriff_sale")):
+        return False
+    if payload.owner_occupant_only and not has_mail_match:
+        return False
+    if payload.recent_divorce_only and not bool(deal.get("recent_divorce")):
+        return False
+
+    return True
+
+
+def _resolve_campaign_property_rows(cur, payload: CampaignCreateRequest) -> list[tuple]:
+    selected_munis = set(_muni_filter_candidates_from_list(payload.munis or payload.muni))
+
+    if (payload.search_query or "").strip():
+        candidate_rows = _search_rows(
+            cur,
+            payload.search_query.strip(),
+            payload.search_mode or "all",
+        )
+        return [
+            row for row in candidate_rows
+            if _row_matches_campaign_filters(row, payload, selected_munis)
+        ]
+
+    query, params = _build_filtered_deals_query(
+        muni=payload.muni,
+        munis=payload.munis,
+        min_score=payload.min_score,
+        min_year_built=payload.min_year_built,
+        max_year_built=payload.max_year_built,
+        distressed_only=payload.distressed_only,
+        bank_owned_only=payload.bank_owned_only,
+        sheriff_sale_only=payload.sheriff_sale_only,
+        owner_occupant_only=payload.owner_occupant_only,
+        recent_divorce_only=payload.recent_divorce_only,
+    )
+    cur.execute(f"{query} ORDER BY deal_score DESC")
+    return cur.fetchall()
+
+
+def _chunked(values: list, chunk_size: int):
+    iterator = iter(values)
+    while chunk := list(islice(iterator, chunk_size)):
+        yield chunk
+
+
+def _fetch_campaign_deals(cur, campaign_id: int) -> list[dict]:
+    cur.execute(
+        """
+        SELECT cp.parcel_id
+        FROM campaign_properties cp
+        WHERE cp.campaign_id = %s
+        ORDER BY cp.id ASC
+        """,
+        [campaign_id],
+    )
+    parcel_ids = [row[0] for row in cur.fetchall() if row[0]]
+    if not parcel_ids:
+        return []
+
+    rows: list[tuple] = []
+    for chunk in _chunked(parcel_ids, 1000):
+        cur.execute(
+            """
+            SELECT
+                parcel_id,
+                address,
+                muni,
+                year_built,
+                assessed_value,
+                total_assessed_value,
+                owners_hidename,
+                owners_name_1,
+                owners_name_2,
+                ownership_change_date,
+                mail_address_1,
+                mail_address_2,
+                mail_address_3,
+                deal_score,
+                sale_type,
+                recent_divorce,
+                divorce_case_status,
+                divorce_date_opened
+            FROM properties
+            WHERE parcel_id = ANY(%s)
+            """,
+            [chunk],
+        )
+        rows.extend(cur.fetchall())
+
+    rows_by_parcel_id = {row[0]: row for row in rows}
+    return [
+        _row_to_deal(rows_by_parcel_id[parcel_id])
+        for parcel_id in parcel_ids
+        if parcel_id in rows_by_parcel_id
+    ]
+
 def _resolve_campaign_identifier(cur, identifier: str) -> int | None:
     normalized = (identifier or "").strip()
     if not normalized:
@@ -576,6 +706,17 @@ def create_campaign(payload: CampaignCreateRequest):
         slug = f"{base_slug}-{suffix}"
         suffix += 1
 
+    provided_parcel_ids = [
+        str(parcel_id).strip()
+        for parcel_id in (payload.parcel_ids or [])
+        if str(parcel_id).strip()
+    ]
+    if provided_parcel_ids:
+        snapshot_parcel_ids = list(dict.fromkeys(provided_parcel_ids))
+    else:
+        snapshot_rows = _resolve_campaign_property_rows(cur, payload)
+        snapshot_parcel_ids = list(dict.fromkeys([row[0] for row in snapshot_rows if row and row[0]]))
+
     tracker_slug = secrets.token_urlsafe(6)
     cur.execute(
         """
@@ -588,10 +729,22 @@ def create_campaign(payload: CampaignCreateRequest):
             slug,
             tracker_slug,
             payload.model_dump_json(),
-            0,
+            len(snapshot_parcel_ids),
         ],
     )
     campaign_id, created_at = cur.fetchone()
+
+    if snapshot_parcel_ids:
+        cur.executemany(
+            """
+            INSERT INTO campaign_properties (campaign_id, parcel_id, snapshot_data)
+            VALUES (%s, %s, %s::jsonb)
+            """,
+            [
+                [campaign_id, parcel_id, json.dumps({"parcel_id": parcel_id})]
+                for parcel_id in snapshot_parcel_ids
+            ],
+        )
 
     conn.commit()
     cur.close()
@@ -602,7 +755,7 @@ def create_campaign(payload: CampaignCreateRequest):
         "slug": slug,
         "name": name,
         "created_at": created_at,
-        "results_count": 0,
+        "results_count": len(snapshot_parcel_ids),
         "tracker_path": f"/t/{tracker_slug}",
     }
 
@@ -682,6 +835,8 @@ def get_campaign(campaign_identifier: str):
         conn.close()
         raise HTTPException(status_code=404, detail="Campaign not found.")
 
+    deals = _fetch_campaign_deals(cur, campaign_id)
+
     cur.close()
     conn.close()
     return {
@@ -693,6 +848,7 @@ def get_campaign(campaign_identifier: str):
         "tracker_path": f"/t/{campaign[5]}",
         "filters_snapshot": campaign[6] or {},
         "visitors": campaign[7],
+        "deals": deals,
     }
 
 
