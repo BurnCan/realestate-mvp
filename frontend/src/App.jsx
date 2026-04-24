@@ -659,6 +659,106 @@ const DealsDashboard = () => {
     if (!name || !name.trim()) return;
     setCreatingCampaign(true);
     setError("");
+
+    const createCampaignFromResponse = (response) => {
+      const campaignPath = response?.data?.slug || response?.data?.id || response?.data?.campaign_id;
+      if (campaignPath !== undefined && campaignPath !== null && String(campaignPath).trim() !== "") {
+        window.history.pushState({}, "", `/campaigns/${campaignPath}`);
+        // Use a generic Event for broader browser compatibility.
+        window.dispatchEvent(new Event("popstate"));
+      } else {
+        setError("Campaign was created, but no campaign id was returned.");
+      }
+    };
+
+    const fetchAllMatchingParcelIds = async () => {
+      const distressedOnly = showDistressedOnly;
+      const bankOwnedOnly = showBankOwnedOnly;
+      const sheriffSaleOnly = showSheriffSaleOnly;
+      const ownerOccupantOnly = showOwnerOccupantOnly;
+      const recentDivorceOnly = showRecentDivorceOnly;
+      const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
+      const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
+      const uniqueParcelIds = new Set();
+
+      if (isSearchMode && (search || "").trim()) {
+        const response = await axios.get(`${API}/search`, {
+          params: {
+            q: search.trim(),
+            mode: searchMode,
+            limit: 100000,
+          },
+        });
+        const results = response.data.results || [];
+        results
+          .filter((deal) => doesDealMatchFrontendFilters({
+            deal,
+            selectedMunis,
+            minScore,
+            distressedOnly,
+            bankOwnedOnly,
+            sheriffSaleOnly,
+            ownerOccupantOnly,
+            recentDivorceOnly,
+            parsedMinYearBuilt,
+            parsedMaxYearBuilt,
+            enforceMunicipalityCheck: true,
+            enforceMinScoreCheck: true,
+          }))
+          .forEach((deal) => {
+            const parcelId = String(deal?.parcel_id || "").trim();
+            if (parcelId) uniqueParcelIds.add(parcelId);
+          });
+      } else {
+        const limit = 500;
+        const baseParams = {
+          munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
+          min_score: minScore || 0,
+          min_year_built: parsedMinYearBuilt,
+          max_year_built: parsedMaxYearBuilt,
+          distressed_only: distressedOnly || undefined,
+          bank_owned_only: bankOwnedOnly || undefined,
+          sheriff_sale_only: sheriffSaleOnly || undefined,
+          recent_divorce_only: recentDivorceOnly || undefined,
+          owner_occupant_only: ownerOccupantOnly || undefined,
+          limit,
+        };
+        let pageNumber = 1;
+        let totalPages = 1;
+
+        while (pageNumber <= totalPages) {
+          const response = await axios.get(`${API}/deals`, {
+            params: {
+              ...baseParams,
+              page: pageNumber,
+            },
+          });
+          const results = response.data.results || [];
+          results
+            .filter((deal) => doesDealMatchFrontendFilters({
+              deal,
+              selectedMunis,
+              minScore,
+              distressedOnly,
+              bankOwnedOnly,
+              sheriffSaleOnly,
+              ownerOccupantOnly,
+              recentDivorceOnly,
+              parsedMinYearBuilt,
+              parsedMaxYearBuilt,
+            }))
+            .forEach((deal) => {
+              const parcelId = String(deal?.parcel_id || "").trim();
+              if (parcelId) uniqueParcelIds.add(parcelId);
+            });
+          totalPages = Math.max(response.data.pagination?.total_pages || 1, 1);
+          pageNumber += 1;
+        }
+      }
+
+      return [...uniqueParcelIds];
+    };
+
     try {
       const payload = {
         name: name.trim(),
@@ -674,14 +774,21 @@ const DealsDashboard = () => {
         search_query: isSearchMode && search.trim() ? search.trim() : undefined,
         search_mode: searchMode,
       };
-      const response = await axios.post(`${API}/campaigns`, payload);
-      const campaignPath = response?.data?.slug || response?.data?.id || response?.data?.campaign_id;
-      if (campaignPath !== undefined && campaignPath !== null && String(campaignPath).trim() !== "") {
-        window.history.pushState({}, "", `/campaigns/${campaignPath}`);
-        // Use a generic Event for broader browser compatibility.
-        window.dispatchEvent(new Event("popstate"));
-      } else {
-        setError("Campaign was created, but no campaign id was returned.");
+      try {
+        const response = await axios.post(`${API}/campaigns`, payload);
+        createCampaignFromResponse(response);
+      } catch (error) {
+        const detail = String(error?.response?.data?.detail || "").toLowerCase();
+        const missingParcelIds = error?.response?.status === 422
+          || (error?.response?.status === 400 && detail.includes("parcel"));
+        if (!missingParcelIds) throw error;
+
+        const parcelIds = await fetchAllMatchingParcelIds();
+        const fallbackResponse = await axios.post(`${API}/campaigns`, {
+          ...payload,
+          parcel_ids: parcelIds,
+        });
+        createCampaignFromResponse(fallbackResponse);
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
