@@ -641,15 +641,29 @@ def _chunked(values: list, chunk_size: int):
         yield chunk
 
 
-def _fetch_campaign_deals(cur, campaign_id: int) -> list[dict]:
+def _dedupe_deals_by_parcel_id(deals: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[str] = set()
+    for deal in deals:
+        parcel_id = str(deal.get("parcel_id") or "").strip()
+        if not parcel_id or parcel_id in seen:
+            continue
+        seen.add(parcel_id)
+        deduped.append(deal)
+    return deduped
+
+
+def _fetch_campaign_deals(cur, campaign_id: int, *, limit: int, offset: int) -> list[dict]:
     cur.execute(
         """
         SELECT cp.parcel_id, cp.snapshot_data
         FROM campaign_properties cp
         WHERE cp.campaign_id = %s
         ORDER BY cp.id ASC
+        LIMIT %s
+        OFFSET %s
         """,
-        [campaign_id],
+        [campaign_id, limit, offset],
     )
     rows = cur.fetchall()
     if not rows:
@@ -748,7 +762,8 @@ def create_campaign(payload: CampaignCreateRequest):
     else:
         snapshot_rows = _resolve_campaign_property_rows(cur, payload)
         snapshot_deals = [_row_to_deal(row) for row in snapshot_rows]
-    snapshot_parcel_ids = list(dict.fromkeys([deal.get("parcel_id") for deal in snapshot_deals if deal.get("parcel_id")]))
+    snapshot_deals = _dedupe_deals_by_parcel_id(snapshot_deals)
+    snapshot_parcel_ids = [deal["parcel_id"] for deal in snapshot_deals]
 
     tracker_slug = secrets.token_urlsafe(6)
     cur.execute(
@@ -839,10 +854,13 @@ def list_campaigns():
 
 
 @app.get("/campaigns/{campaign_identifier}")
-def get_campaign(campaign_identifier: str):
+def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
     conn = get_conn()
     cur = conn.cursor()
     ensure_campaign_schema(conn)
+    page = max(page, 1)
+    limit = max(1, min(limit, 250))
+    offset = (page - 1) * limit
     campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
     if campaign_id is None:
         cur.close()
@@ -873,7 +891,12 @@ def get_campaign(campaign_identifier: str):
         conn.close()
         raise HTTPException(status_code=404, detail="Campaign not found.")
 
-    deals = _fetch_campaign_deals(cur, campaign_id)
+    cur.execute(
+        "SELECT COUNT(*) FROM campaign_properties WHERE campaign_id = %s",
+        [campaign_id],
+    )
+    total = cur.fetchone()[0]
+    deals = _fetch_campaign_deals(cur, campaign_id, limit=limit, offset=offset)
 
     cur.close()
     conn.close()
@@ -887,6 +910,12 @@ def get_campaign(campaign_identifier: str):
         "filters_snapshot": campaign[6] or {},
         "visitors": campaign[7],
         "deals": deals,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": max((total + limit - 1) // limit, 1),
+        },
     }
 
 
