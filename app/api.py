@@ -722,6 +722,7 @@ def create_campaign(payload: CampaignCreateRequest):
 
     conn = get_conn()
     cur = conn.cursor()
+    ensure_properties_schema(conn)
     ensure_campaign_schema(conn)
 
     base_slug = _slugify_campaign_name(name)
