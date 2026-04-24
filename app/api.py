@@ -882,6 +882,27 @@ def get_campaign(campaign_identifier: str):
     }
 
 
+@app.delete("/campaigns/{campaign_identifier}")
+def delete_campaign(campaign_identifier: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
+    if campaign_id is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+
+    cur.execute("DELETE FROM campaign_properties WHERE campaign_id = %s", [campaign_id])
+    deleted_snapshot_rows = cur.rowcount
+    cur.execute("DELETE FROM campaign_visits WHERE campaign_id = %s", [campaign_id])
+    cur.execute("DELETE FROM campaigns WHERE id = %s", [campaign_id])
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"ok": True, "deleted_snapshots": deleted_snapshot_rows}
+
+
 @app.get("/t/{tracker_slug}", response_class=HTMLResponse)
 def tracker_redirect(tracker_slug: str, request: Request):
     conn = get_conn()

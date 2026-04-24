@@ -954,6 +954,7 @@ const CampaignsDashboard = ({ navigate }) => {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -964,6 +965,25 @@ const CampaignsDashboard = ({ navigate }) => {
       .catch(() => setError("Could not load campaigns."))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleDeleteCampaign = async (campaign) => {
+    const campaignLabel = campaign.name || `campaign ${campaign.id}`;
+    const shouldDelete = window.confirm(`Delete ${campaignLabel}? This cannot be undone.`);
+    if (!shouldDelete) return;
+
+    setDeletingId(campaign.id);
+    setError("");
+    try {
+      await axios.delete(`${API}/campaigns/${campaign.slug || campaign.id}`);
+      setCampaigns((prevCampaigns) => (
+        prevCampaigns.filter((existingCampaign) => existingCampaign.id !== campaign.id)
+      ));
+    } catch {
+      setError("Could not delete campaign.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
@@ -977,6 +997,7 @@ const CampaignsDashboard = ({ navigate }) => {
             <tr>
               <th>Name</th>
               <th>Created</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -988,6 +1009,14 @@ const CampaignsDashboard = ({ navigate }) => {
                   </button>
                 </td>
                 <td>{formatOwnershipChangeDate(campaign.created_at)}</td>
+                <td>
+                  <button
+                    onClick={() => handleDeleteCampaign(campaign)}
+                    disabled={deletingId === campaign.id}
+                  >
+                    {deletingId === campaign.id ? "Deleting..." : "Delete"}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
