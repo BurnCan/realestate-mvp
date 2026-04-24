@@ -746,6 +746,18 @@ def create_campaign(payload: CampaignCreateRequest):
     ensure_properties_schema(conn)
     ensure_campaign_schema(conn)
 
+    cur.execute(
+        "SELECT 1 FROM campaigns WHERE LOWER(name) = LOWER(%s) LIMIT 1",
+        [name],
+    )
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        raise HTTPException(
+            status_code=400,
+            detail="Campaign name already exists please choose a different name.",
+        )
+
     base_slug = _slugify_campaign_name(name)
     slug = base_slug
     suffix = 2
