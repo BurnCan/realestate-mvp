@@ -778,11 +778,14 @@ const DealsDashboard = () => {
         const response = await axios.post(`${API}/campaigns`, payload);
         createCampaignFromResponse(response);
       } catch (error) {
-        const detail = String(error?.response?.data?.detail || "").toLowerCase();
-        const missingParcelIds = error?.response?.status === 422
-          || (error?.response?.status === 400 && detail.includes("parcel"));
-        if (!missingParcelIds) throw error;
+        const detailText = String(error?.response?.data?.detail || "");
+        const normalizedDetail = detailText.toLowerCase();
+        const isNameValidationError = error?.response?.status === 400
+          && normalizedDetail.includes("campaign name is required");
+        if (isNameValidationError) throw error;
 
+        // Retry with explicit parcel ids so campaign creation does not depend on
+        // server-side filter resolution differences.
         const parcelIds = await fetchAllMatchingParcelIds();
         const fallbackResponse = await axios.post(`${API}/campaigns`, {
           ...payload,
