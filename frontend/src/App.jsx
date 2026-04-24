@@ -1135,8 +1135,19 @@ const CampaignsDashboard = ({ navigate }) => {
 const CampaignDetailDashboard = ({ campaignIdentifier }) => {
   const [campaign, setCampaign] = useState(null);
   const [deals, setDeals] = useState([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 250,
+    total: 0,
+    total_pages: 1,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [campaignIdentifier]);
 
   useEffect(() => {
     if (!campaignIdentifier) return;
@@ -1144,20 +1155,37 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
       setLoading(true);
       setError("");
       try {
-        const campaignResponse = await axios.get(`${API}/campaigns/${campaignIdentifier}`);
+        const campaignResponse = await axios.get(
+          `${API}/campaigns/${campaignIdentifier}`,
+          { params: { page, limit: 250 } },
+        );
         const campaignData = campaignResponse.data;
         setCampaign(campaignData);
         setDeals(campaignData?.deals || []);
+        setPagination(
+          campaignData?.pagination || {
+            page,
+            limit: 250,
+            total: campaignData?.results_count || 0,
+            total_pages: 1,
+          },
+        );
       } catch {
         setCampaign(null);
         setDeals([]);
+        setPagination({
+          page: 1,
+          limit: 250,
+          total: 0,
+          total_pages: 1,
+        });
         setError("Could not load campaign details.");
       } finally {
         setLoading(false);
       }
     };
     fetchCampaignAndDeals();
-  }, [campaignIdentifier]);
+  }, [campaignIdentifier, page]);
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
@@ -1167,7 +1195,29 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
         <>
           <h1>📬 {campaign.name}</h1>
           <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
-          <p>Showing {deals.length.toLocaleString()} properties snapshotted at campaign creation.</p>
+          <p>
+            Showing {(pagination.total || campaign.results_count || 0).toLocaleString()} properties
+            snapshotted at campaign creation.
+          </p>
+          <p>
+            Page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
+            {deals.length.toLocaleString()} shown on this page)
+          </p>
+          <div style={{ marginBottom: 10 }}>
+            <button
+              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+              disabled={loading || page <= 1}
+            >
+              Previous
+            </button>
+            <button
+              style={{ marginLeft: 8 }}
+              onClick={() => setPage((prev) => prev + 1)}
+              disabled={loading || page >= pagination.total_pages}
+            >
+              Next
+            </button>
+          </div>
           <DealsTable deals={deals} />
         </>
       )}
