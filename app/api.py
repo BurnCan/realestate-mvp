@@ -385,6 +385,12 @@ def get_deals(
     cur.execute(count_query, params)
     total = cur.fetchone()[0]
 
+    unique_count_query = (
+        f"SELECT COUNT(DISTINCT parcel_id) FROM ({base_query}) AS filtered_properties"
+    )
+    cur.execute(unique_count_query, params)
+    unique_total = cur.fetchone()[0]
+
     query = f"{base_query} ORDER BY deal_score DESC LIMIT %s OFFSET %s"
     query_params = params + [limit, offset]
 
@@ -402,6 +408,7 @@ def get_deals(
             "page": page,
             "limit": limit,
             "total": total,
+            "unique_total": unique_total,
             "total_pages": (total + limit - 1) // limit,
         },
     }

@@ -956,7 +956,8 @@ const DealsDashboard = () => {
       {error && <p style={{ color: "crimson" }}>{error}</p>}
       <p>
         Showing page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
-        {pagination.total.toLocaleString()} total results)
+        {(pagination.unique_total ?? pagination.total).toLocaleString()} unique properties,{" "}
+        {pagination.total.toLocaleString()} total rows)
       </p>
       {!isSearchMode && (
         <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
