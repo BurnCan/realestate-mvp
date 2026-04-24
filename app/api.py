@@ -391,7 +391,7 @@ def get_deals(
     cur.execute(unique_count_query, params)
     unique_total = cur.fetchone()[0]
 
-    query = f"{base_query} ORDER BY deal_score DESC LIMIT %s OFFSET %s"
+    query = f"{base_query} ORDER BY deal_score DESC, parcel_id ASC LIMIT %s OFFSET %s"
     query_params = params + [limit, offset]
 
     cur.execute(query, query_params)
@@ -471,7 +471,7 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
         FROM properties
         WHERE deal_score IS NOT NULL
           AND {where_clause}
-        ORDER BY deal_score DESC
+        ORDER BY deal_score DESC, parcel_id ASC
         LIMIT %s
         """,
         [*params, limit],
@@ -543,7 +543,7 @@ def _search_rows(cur, q: str, mode: str, limit: int = 100000):
         FROM properties
         WHERE deal_score IS NOT NULL
           AND {where_clause}
-        ORDER BY deal_score DESC
+        ORDER BY deal_score DESC, parcel_id ASC
         LIMIT %s
         """,
         [*params, limit],
@@ -617,7 +617,7 @@ def _resolve_campaign_property_rows(cur, payload: CampaignCreateRequest) -> list
         owner_occupant_only=payload.owner_occupant_only,
         recent_divorce_only=payload.recent_divorce_only,
     )
-    cur.execute(f"{query} ORDER BY deal_score DESC")
+    cur.execute(f"{query} ORDER BY deal_score DESC, parcel_id ASC")
     return cur.fetchall()
 
 
