@@ -172,11 +172,13 @@ const doesDealMatchFrontendFilters = ({
   && (!enforceMinScoreCheck || (deal.deal_score ?? 0) >= minScore)
 );
 
-const formatMailingAddress = (deal) => (
+const getMailingAddressLines = (deal) => (
   [deal.mail_address_1, deal.mail_address_2, deal.mail_address_3]
-    .filter((line) => line && String(line).trim())
-    .join(", ")
+    .map((line) => String(line || "").trim())
+    .filter((line) => line)
 );
+
+const formatMailingAddress = (deal) => getMailingAddressLines(deal).join(", ");
 
 const normalizeMailingAddressForDedup = (mailingAddress) => (
   String(mailingAddress || "")
@@ -184,6 +186,10 @@ const normalizeMailingAddressForDedup = (mailingAddress) => (
     .toLowerCase()
     .replace(/\bpa\s+(\d{5})-\d{4}\b/g, "pa $1")
     .replace(/[^a-z0-9 ]/g, "")
+);
+
+const normalizeDealMailingAddressForDedup = (deal) => (
+  normalizeMailingAddressForDedup(getMailingAddressLines(deal).join(", "))
 );
 
 const sanitizeOwnerNameForExport = (ownerName) => {
@@ -222,15 +228,16 @@ const downloadOwnerMailingCsv = (deals, filenamePrefix = "owners-mailing-address
     .map((deal) => ([
       sanitizeOwnerNameForExport(deal.owners_name_1),
       formatMailingAddress(deal),
+      normalizeDealMailingAddressForDedup(deal),
     ]))
-    .filter(([, mailingAddress]) => {
-      const normalizedAddress = normalizeMailingAddressForDedup(mailingAddress);
+    .filter(([, , normalizedAddress]) => {
       if (!normalizedAddress || seenAddresses.has(normalizedAddress)) {
         return false;
       }
       seenAddresses.add(normalizedAddress);
       return true;
-    });
+    })
+    .map(([ownerName, mailingAddress]) => [ownerName, mailingAddress]);
   const csvText = [
     csvHeader.map(escapeCsvValue).join(","),
     ...csvRows.map((row) => row.map(escapeCsvValue).join(",")),
