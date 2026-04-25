@@ -207,6 +207,40 @@ const escapeCsvValue = (value) => {
   return text;
 };
 
+const downloadOwnerMailingCsv = (deals, filenamePrefix = "owners-mailing-addresses") => {
+  const csvHeader = ["Owner Name 1", "Mailing Address"];
+  const seenAddresses = new Set();
+  const csvRows = deals
+    .map((deal) => ([
+      sanitizeOwnerNameForExport(deal.owners_name_1),
+      formatMailingAddress(deal),
+    ]))
+    .filter(([, mailingAddress]) => {
+      const normalizedAddress = (mailingAddress || "").trim().toLowerCase();
+      if (!normalizedAddress || seenAddresses.has(normalizedAddress)) {
+        return false;
+      }
+      seenAddresses.add(normalizedAddress);
+      return true;
+    });
+  const csvText = [
+    csvHeader.map(escapeCsvValue).join(","),
+    ...csvRows.map((row) => row.map(escapeCsvValue).join(",")),
+  ].join("\n");
+
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  const now = new Date().toISOString().slice(0, 10);
+  link.download = `${filenamePrefix}-${now}.csv`;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
 const DealsTable = ({ deals }) => (
   <table width="100%" border="1" cellPadding="8">
     <thead>
@@ -348,7 +382,6 @@ const DealsDashboard = () => {
   const [maxYearBuilt, setMaxYearBuilt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [exporting, setExporting] = useState(false);
   const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
@@ -537,121 +570,6 @@ const DealsDashboard = () => {
       recentDivorceOnly: showRecentDivorceOnly,
       pageNumber: 1,
     });
-  };
-
-  const exportFilteredDealsToCsv = async () => {
-    setExporting(true);
-    setError("");
-    try {
-      const distressedOnly = showDistressedOnly;
-      const bankOwnedOnly = showBankOwnedOnly;
-      const sheriffSaleOnly = showSheriffSaleOnly;
-      const ownerOccupantOnly = showOwnerOccupantOnly;
-      const recentDivorceOnly = showRecentDivorceOnly;
-      const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
-      const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
-      let allDeals = [];
-
-      if (isSearchMode && (search || "").trim()) {
-        const response = await axios.get(`${API}/search`, {
-          params: {
-            q: search.trim(),
-            mode: searchMode,
-            limit: 100000,
-          },
-        });
-        const results = response.data.results || [];
-        allDeals = results.filter((deal) => doesDealMatchFrontendFilters({
-          deal,
-          selectedMunis,
-          minScore,
-          distressedOnly,
-          bankOwnedOnly,
-          sheriffSaleOnly,
-          ownerOccupantOnly,
-          recentDivorceOnly,
-          parsedMinYearBuilt,
-          parsedMaxYearBuilt,
-          enforceMunicipalityCheck: true,
-          enforceMinScoreCheck: true,
-        }));
-      } else {
-        const limit = 500;
-        const baseParams = {
-          munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
-          min_score: minScore || 0,
-          min_year_built: parsedMinYearBuilt,
-          max_year_built: parsedMaxYearBuilt,
-          distressed_only: distressedOnly || undefined,
-          bank_owned_only: bankOwnedOnly || undefined,
-          sheriff_sale_only: sheriffSaleOnly || undefined,
-          recent_divorce_only: recentDivorceOnly || undefined,
-          limit,
-        };
-        let pageNumber = 1;
-        let totalPages = 1;
-
-        while (pageNumber <= totalPages) {
-          const response = await axios.get(`${API}/deals`, {
-            params: {
-              ...baseParams,
-              page: pageNumber,
-            },
-          });
-          const results = response.data.results || [];
-          allDeals.push(...results.filter((deal) => doesDealMatchFrontendFilters({
-            deal,
-            selectedMunis,
-            minScore,
-            distressedOnly,
-            bankOwnedOnly,
-            sheriffSaleOnly,
-            ownerOccupantOnly,
-            recentDivorceOnly,
-            parsedMinYearBuilt,
-            parsedMaxYearBuilt,
-          })));
-          totalPages = Math.max(response.data.pagination?.total_pages || 1, 1);
-          pageNumber += 1;
-        }
-      }
-
-      const csvHeader = ["Owner Name 1", "Mailing Address"];
-      const seenAddresses = new Set();
-      const csvRows = allDeals
-        .map((deal) => ([
-          sanitizeOwnerNameForExport(deal.owners_name_1),
-          formatMailingAddress(deal),
-        ]))
-        .filter(([, mailingAddress]) => {
-          const normalizedAddress = (mailingAddress || "").trim().toLowerCase();
-          if (!normalizedAddress || seenAddresses.has(normalizedAddress)) {
-            return false;
-          }
-          seenAddresses.add(normalizedAddress);
-          return true;
-        });
-      const csvText = [
-        csvHeader.map(escapeCsvValue).join(","),
-        ...csvRows.map((row) => row.map(escapeCsvValue).join(",")),
-      ].join("\n");
-
-      const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      const now = new Date().toISOString().slice(0, 10);
-      link.download = `owners-mailing-addresses-${now}.csv`;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch {
-      setError("Could not export CSV. Make sure the API server is running.");
-    } finally {
-      setExporting(false);
-    }
   };
 
   const createCampaignFromCurrentFilters = async () => {
@@ -943,9 +861,6 @@ const DealsDashboard = () => {
           ))}
 
           <button onClick={applyFilters}>Apply Filters</button>
-          <button onClick={exportFilteredDealsToCsv} disabled={exporting}>
-            {exporting ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
-          </button>
           <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
             {creatingCampaign ? "Creating Campaign..." : "Create Campaign"}
           </button>
@@ -1144,6 +1059,7 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [exportingSnapshot, setExportingSnapshot] = useState(false);
 
   useEffect(() => {
     setPage(1);
@@ -1187,6 +1103,34 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
     fetchCampaignAndDeals();
   }, [campaignIdentifier, page]);
 
+  const exportCampaignSnapshotToCsv = async () => {
+    if (!campaignIdentifier) return;
+    setExportingSnapshot(true);
+    setError("");
+    try {
+      const firstResponse = await axios.get(`${API}/campaigns/${campaignIdentifier}`, {
+        params: { page: 1, limit: 250 },
+      });
+      const firstPageData = firstResponse.data || {};
+      const totalPages = Math.max(firstPageData?.pagination?.total_pages || 1, 1);
+      const allDeals = [...(firstPageData?.deals || [])];
+
+      for (let pageNumber = 2; pageNumber <= totalPages; pageNumber += 1) {
+        const response = await axios.get(`${API}/campaigns/${campaignIdentifier}`, {
+          params: { page: pageNumber, limit: 250 },
+        });
+        allDeals.push(...(response.data?.deals || []));
+      }
+
+      const campaignSlugOrId = firstPageData?.slug || firstPageData?.id || campaignIdentifier;
+      downloadOwnerMailingCsv(allDeals, `campaign-${campaignSlugOrId}-owners-mailing-addresses`);
+    } catch {
+      setError("Could not export campaign snapshot CSV. Make sure the API server is running.");
+    } finally {
+      setExportingSnapshot(false);
+    }
+  };
+
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       {loading && <p>Loading campaign...</p>}
@@ -1205,6 +1149,13 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
           </p>
           <div style={{ marginBottom: 10 }}>
             <button
+              onClick={exportCampaignSnapshotToCsv}
+              disabled={loading || exportingSnapshot}
+            >
+              {exportingSnapshot ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
+            </button>
+            <button
+              style={{ marginLeft: 8 }}
               onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
               disabled={loading || page <= 1}
             >
