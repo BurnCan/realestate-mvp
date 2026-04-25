@@ -178,6 +178,14 @@ const formatMailingAddress = (deal) => (
     .join(", ")
 );
 
+const normalizeMailingAddressForDedup = (mailingAddress) => (
+  String(mailingAddress || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\bpa\s+(\d{5})-\d{4}\b/g, "pa $1")
+    .replace(/[^a-z0-9 ]/g, "")
+);
+
 const sanitizeOwnerNameForExport = (ownerName) => {
   const value = String(ownerName || "").trim();
   if (!value) return "";
@@ -216,7 +224,7 @@ const downloadOwnerMailingCsv = (deals, filenamePrefix = "owners-mailing-address
       formatMailingAddress(deal),
     ]))
     .filter(([, mailingAddress]) => {
-      const normalizedAddress = (mailingAddress || "").trim().toLowerCase();
+      const normalizedAddress = normalizeMailingAddressForDedup(mailingAddress);
       if (!normalizedAddress || seenAddresses.has(normalizedAddress)) {
         return false;
       }
@@ -1141,7 +1149,9 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
           <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
           <p>
             Showing {(pagination.total || campaign.results_count || 0).toLocaleString()} properties
-            snapshotted at campaign creation.
+            snapshotted at campaign creation, with{" "}
+            {(campaign.unique_mailing_addresses_count || 0).toLocaleString()} unique mailing addresses
+            after deduplication.
           </p>
           <p>
             Page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
