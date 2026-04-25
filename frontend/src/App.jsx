@@ -919,38 +919,52 @@ const DealsDashboard = () => {
               ))}
             </div>
 
-            <input
-              type="number"
-              placeholder="Min Year Built"
-              value={minYearBuilt}
-              onChange={(e) => setMinYearBuilt(e.target.value)}
-            />
+            <div
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: 4,
+                padding: 8,
+                minWidth: 220,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              {includeFilterToggles.map((filter) => (
+                <label
+                  key={filter.key}
+                  style={{ display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={filter.checked}
+                    onChange={(e) => filter.onChange(e.target.checked)}
+                  />
+                  {filter.label}
+                </label>
+              ))}
+            </div>
 
-            <input
-              type="number"
-              placeholder="Max Year Built"
-              value={maxYearBuilt}
-              onChange={(e) => setMaxYearBuilt(e.target.value)}
-            />
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="number"
+                placeholder="Min Year Built"
+                value={minYearBuilt}
+                onChange={(e) => setMinYearBuilt(e.target.value)}
+              />
 
-            {includeFilterToggles.map((filter) => (
-              <label
-                key={filter.key}
-                style={{ display: "flex", alignItems: "center", gap: 6 }}
-              >
-                <input
-                  type="checkbox"
-                  checked={filter.checked}
-                  onChange={(e) => filter.onChange(e.target.checked)}
-                />
-                {filter.label}
-              </label>
-            ))}
+              <input
+                type="number"
+                placeholder="Max Year Built"
+                value={maxYearBuilt}
+                onChange={(e) => setMaxYearBuilt(e.target.value)}
+              />
 
-            <button onClick={applyFilters}>Apply Filters</button>
-            <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
-              {creatingCampaign ? "Creating Campaign..." : "Create Campaign"}
-            </button>
+              <button onClick={applyFilters}>Apply Filters</button>
+              <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
+                {creatingCampaign ? "Creating Campaign..." : "Create Campaign"}
+              </button>
+            </div>
           </div>
         </fieldset>
       </section>
