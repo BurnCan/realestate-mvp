@@ -94,15 +94,84 @@ const isBankOwnedProperty = (deal) => {
 };
 
 const isSheriffSaleProperty = (deal) => Boolean(deal.is_sheriff_sale);
+const ORDINAL_BASE_WORDS = {
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  fifth: 5,
+  sixth: 6,
+  seventh: 7,
+  eighth: 8,
+  ninth: 9,
+  tenth: 10,
+  eleventh: 11,
+  twelfth: 12,
+  thirteenth: 13,
+  fourteenth: 14,
+  fifteenth: 15,
+  sixteenth: 16,
+  seventeenth: 17,
+  eighteenth: 18,
+  nineteenth: 19,
+  twentieth: 20,
+  thirtieth: 30,
+  fortieth: 40,
+  fiftieth: 50,
+  sixtieth: 60,
+  seventieth: 70,
+  eightieth: 80,
+  ninetieth: 90,
+};
+const ORDINAL_TENS = {
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+};
+const ORDINAL_UNITS = {
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  fifth: 5,
+  sixth: 6,
+  seventh: 7,
+  eighth: 8,
+  ninth: 9,
+};
+const ORDINAL_PHRASE_TO_NUMBER = [
+  ...Object.entries(ORDINAL_BASE_WORDS),
+  ...Object.entries(ORDINAL_TENS).flatMap(([tensWord, tensValue]) => (
+    Object.entries(ORDINAL_UNITS).map(([unitWord, unitValue]) => (
+      [`${tensWord} ${unitWord}`, tensValue + unitValue]
+    ))
+  )),
+].sort((a, b) => b[0].length - a[0].length);
+
+const normalizeOwnerOccupantAddress = (value) => {
+  let text = String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\b(\d+)(st|nd|rd|th)\b/g, "$1");
+
+  ORDINAL_PHRASE_TO_NUMBER.forEach(([phrase, number]) => {
+    text = text.replace(new RegExp(`\\b${phrase}\\b`, "g"), String(number));
+  });
+
+  return text.replace(/\s+/g, " ").trim();
+};
+
 const isOwnerOccupantProperty = (deal) => {
-  const propertyAddress = String(deal.address || "")
-    .toLowerCase()
-    .trim();
-  const mailingAddress = [deal.mail_address_1, deal.mail_address_2, deal.mail_address_3]
+  const propertyAddress = normalizeOwnerOccupantAddress(deal.address);
+  const mailingAddress = normalizeOwnerOccupantAddress([deal.mail_address_1, deal.mail_address_2, deal.mail_address_3]
     .filter((line) => line && String(line).trim())
-    .join(" ")
-    .toLowerCase()
-    .trim();
+    .join(" "));
 
   if (!propertyAddress || !mailingAddress) return false;
 

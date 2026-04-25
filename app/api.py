@@ -67,6 +67,100 @@ def _normalize_address(value: str | None) -> str:
     return re.sub(r"[^a-z0-9 ]", "", text)
 
 
+_ORDINAL_BASE_WORDS: dict[str, int] = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "sixth": 6,
+    "seventh": 7,
+    "eighth": 8,
+    "ninth": 9,
+    "tenth": 10,
+    "eleventh": 11,
+    "twelfth": 12,
+    "thirteenth": 13,
+    "fourteenth": 14,
+    "fifteenth": 15,
+    "sixteenth": 16,
+    "seventeenth": 17,
+    "eighteenth": 18,
+    "nineteenth": 19,
+    "twentieth": 20,
+    "thirtieth": 30,
+    "fortieth": 40,
+    "fiftieth": 50,
+    "sixtieth": 60,
+    "seventieth": 70,
+    "eightieth": 80,
+    "ninetieth": 90,
+}
+_ORDINAL_TENS: dict[str, int] = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+_ORDINAL_UNITS: dict[str, int] = {
+    "first": 1,
+    "second": 2,
+    "third": 3,
+    "fourth": 4,
+    "fifth": 5,
+    "sixth": 6,
+    "seventh": 7,
+    "eighth": 8,
+    "ninth": 9,
+}
+_ORDINAL_PHRASE_TO_NUMBER: list[tuple[str, int]] = sorted(
+    [
+        *[(word, number) for word, number in _ORDINAL_BASE_WORDS.items()],
+        *[
+            (f"{tens_word} {unit_word}", tens_value + unit_value)
+            for tens_word, tens_value in _ORDINAL_TENS.items()
+            for unit_word, unit_value in _ORDINAL_UNITS.items()
+        ],
+    ],
+    key=lambda item: len(item[0]),
+    reverse=True,
+)
+
+
+def _normalize_owner_occupant_address(value: str | None) -> str:
+    text = _normalize_text(value)
+    text = re.sub(r"[^a-z0-9 ]", " ", text)
+    text = re.sub(r"\b(\d+)(st|nd|rd|th)\b", r"\1", text)
+    for phrase, number in _ORDINAL_PHRASE_TO_NUMBER:
+        text = re.sub(rf"\b{re.escape(phrase)}\b", str(number), text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _owner_occupant_address_match(address: str | None, mailing_address: str | None) -> bool:
+    normalized_address = _normalize_owner_occupant_address(address)
+    normalized_mailing = _normalize_owner_occupant_address(mailing_address)
+    if not normalized_address or not normalized_mailing:
+        return False
+    return (
+        normalized_mailing in normalized_address
+        or normalized_address in normalized_mailing
+    )
+
+
+def _normalize_owner_occupant_sql(expression: str) -> str:
+    normalized = f"LOWER(TRIM(COALESCE({expression}, '')))"
+    normalized = f"REGEXP_REPLACE({normalized}, '[^a-z0-9 ]', ' ', 'g')"
+    normalized = f"REGEXP_REPLACE({normalized}, '\\\\m([0-9]+)(st|nd|rd|th)\\\\M', '\\\\1', 'g')"
+    for phrase, number in _ORDINAL_PHRASE_TO_NUMBER:
+        normalized = f"REGEXP_REPLACE({normalized}, '\\\\m{phrase}\\\\M', '{number}', 'g')"
+    normalized = f"REGEXP_REPLACE({normalized}, '\\\\s+', ' ', 'g')"
+    return f"TRIM({normalized})"
+
+
 def _normalize_owner_search_text(value: str | None) -> str:
     text = _normalize_text(value)
     text = re.sub(r"[^a-z0-9 ]", " ", text)
@@ -265,16 +359,18 @@ def _build_filtered_deals_query(
     if recent_divorce_only:
         status_conditions.append("COALESCE(recent_divorce, FALSE) IS TRUE")
     if owner_occupant_only:
+        normalized_property_address = _normalize_owner_occupant_sql("address")
+        normalized_mailing_address = _normalize_owner_occupant_sql(
+            "CONCAT_WS(' ', mail_address_1, mail_address_2, mail_address_3)"
+        )
         status_conditions.append(
-            """
+            f"""
             (
-                LOWER(TRIM(COALESCE(address, ''))) <> ''
-                AND LOWER(TRIM(CONCAT_WS(' ', mail_address_1, mail_address_2, mail_address_3))) <> ''
+                {normalized_property_address} <> ''
+                AND {normalized_mailing_address} <> ''
                 AND (
-                    LOWER(TRIM(CONCAT_WS(' ', mail_address_1, mail_address_2, mail_address_3)))
-                        LIKE CONCAT('%%', LOWER(TRIM(COALESCE(address, ''))), '%%')
-                    OR LOWER(TRIM(COALESCE(address, '')))
-                        LIKE CONCAT('%%', LOWER(TRIM(CONCAT_WS(' ', mail_address_1, mail_address_2, mail_address_3))), '%%')
+                    {normalized_mailing_address} LIKE CONCAT('%%', {normalized_property_address}, '%%')
+                    OR {normalized_property_address} LIKE CONCAT('%%', {normalized_mailing_address}, '%%')
                 )
             )
             """
@@ -577,10 +673,16 @@ def _row_matches_campaign_filters(row: tuple, payload: CampaignCreateRequest, se
     if payload.max_year_built is not None and (year_built is None or year_built > payload.max_year_built):
         return False
 
-    address = _normalize_address(deal.get("address"))
-    mail_parts = [deal.get("mail_address_1"), deal.get("mail_address_2"), deal.get("mail_address_3")]
-    normalized_mail = [_normalize_address(part) for part in mail_parts if part]
-    has_mail_match = bool(address and any(address == candidate for candidate in normalized_mail))
+    has_mail_match = _owner_occupant_address_match(
+        deal.get("address"),
+        " ".join(
+            [
+                str(part).strip()
+                for part in [deal.get("mail_address_1"), deal.get("mail_address_2"), deal.get("mail_address_3")]
+                if part and str(part).strip()
+            ]
+        ),
+    )
 
     if payload.distressed_only and deal.get("sale_type") != "distressed":
         return False
