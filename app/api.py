@@ -689,10 +689,10 @@ def _count_unique_campaign_mailing_addresses(cur, campaign_id: int) -> int:
                         LOWER(
                             TRIM(
                                 CONCAT_WS(
-                                    ' ',
-                                    COALESCE(cp.snapshot_data->>'mail_address_1', ''),
-                                    COALESCE(cp.snapshot_data->>'mail_address_2', ''),
-                                    COALESCE(cp.snapshot_data->>'mail_address_3', '')
+                                    ', ',
+                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_1'), ''),
+                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_2'), ''),
+                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_3'), '')
                                 )
                             )
                         ),
