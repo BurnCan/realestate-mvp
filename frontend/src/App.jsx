@@ -1147,6 +1147,13 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
     }
   };
 
+  const currentRedirectDestination = campaign
+    ? (campaign.redirect_url || `/campaigns/${campaign.slug || campaign.id}`)
+    : "";
+  const currentFullRedirectUrl = currentRedirectDestination
+    ? new URL(currentRedirectDestination, window.location.origin).toString()
+    : "";
+
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       {loading && <p>Loading campaign...</p>}
@@ -1162,8 +1169,14 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
               {API}{campaign.tracker_path}
             </a>
           </p>
+          <p>
+            Current Redirect URL:{" "}
+            <a href={currentFullRedirectUrl} target="_blank" rel="noreferrer">
+              {currentFullRedirectUrl}
+            </a>
+          </p>
           <div style={{ marginBottom: 10 }}>
-            <label htmlFor="campaign-redirect-url">Tracker redirect URL: </label>
+            <label htmlFor="campaign-redirect-url">Change Redirect URL to: </label>
             <input
               id="campaign-redirect-url"
               type="text"
