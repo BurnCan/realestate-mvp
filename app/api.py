@@ -44,6 +44,10 @@ class CampaignCreateRequest(BaseModel):
     search_mode: str = "all"
 
 
+class CampaignUpdateRequest(BaseModel):
+    redirect_url: str | None = None
+
+
 def _slugify_campaign_name(name: str) -> str:
     ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_name.strip().lower()).strip("-")
@@ -837,6 +841,11 @@ def _resolve_campaign_identifier(cur, identifier: str) -> int | None:
     return row[0] if row else None
 
 
+def _normalize_redirect_url(value: str | None) -> str | None:
+    normalized = (value or "").strip()
+    return normalized or None
+
+
 @app.post("/campaigns")
 def create_campaign(payload: CampaignCreateRequest):
     name = payload.name.strip()
@@ -880,16 +889,18 @@ def create_campaign(payload: CampaignCreateRequest):
     snapshot_parcel_ids = [deal["parcel_id"] for deal in snapshot_deals]
 
     tracker_slug = secrets.token_urlsafe(6)
+    redirect_url = _normalize_redirect_url(payload.target_url)
     cur.execute(
         """
-        INSERT INTO campaigns (name, slug, tracker_slug, filters_snapshot, results_count)
-        VALUES (%s, %s, %s, %s::jsonb, %s)
+        INSERT INTO campaigns (name, slug, tracker_slug, redirect_url, filters_snapshot, results_count)
+        VALUES (%s, %s, %s, %s, %s::jsonb, %s)
         RETURNING id, created_at
         """,
         [
             name,
             slug,
             tracker_slug,
+            redirect_url,
             payload.model_dump_json(),
             len(snapshot_parcel_ids),
         ],
@@ -923,7 +934,8 @@ def create_campaign(payload: CampaignCreateRequest):
         "name": name,
         "created_at": created_at,
         "results_count": len(snapshot_parcel_ids),
-        "tracker_path": f"/t/{tracker_slug}",
+        "redirect_url": redirect_url,
+        "tracker_path": f"/campaigns/{slug}/tracker",
     }
 
 
@@ -941,6 +953,7 @@ def list_campaigns():
             c.created_at,
             c.results_count,
             c.tracker_slug,
+            c.redirect_url,
             COUNT(cv.id) AS visitors
         FROM campaigns c
         LEFT JOIN campaign_visits cv ON cv.campaign_id = c.id
@@ -959,8 +972,9 @@ def list_campaigns():
                 "slug": r[2],
                 "created_at": r[3],
                 "results_count": r[4],
-                "tracker_path": f"/t/{r[5]}",
-                "visitors": r[6],
+                "tracker_path": f"/campaigns/{r[2] or r[0]}/tracker",
+                "redirect_url": r[6],
+                "visitors": r[7],
             }
             for r in rows
         ]
@@ -990,6 +1004,7 @@ def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
             c.created_at,
             c.results_count,
             c.tracker_slug,
+            c.redirect_url,
             c.filters_snapshot,
             COUNT(cv.id) AS visitors
         FROM campaigns c
@@ -1021,9 +1036,10 @@ def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
         "slug": campaign[2],
         "created_at": campaign[3],
         "results_count": campaign[4],
-        "tracker_path": f"/t/{campaign[5]}",
-        "filters_snapshot": campaign[6] or {},
-        "visitors": campaign[7],
+        "tracker_path": f"/campaigns/{campaign[2] or campaign[0]}/tracker",
+        "redirect_url": campaign[6],
+        "filters_snapshot": campaign[7] or {},
+        "visitors": campaign[8],
         "unique_mailing_addresses_count": unique_mailing_addresses_count,
         "deals": deals,
         "pagination": {
@@ -1076,21 +1092,55 @@ def delete_campaign(campaign_identifier: str):
     return {"ok": True, "deleted_snapshots": deleted_snapshot_rows}
 
 
-@app.get("/t/{tracker_slug}", response_class=HTMLResponse)
-def tracker_redirect(tracker_slug: str, request: Request):
+@app.patch("/campaigns/{campaign_identifier}")
+def update_campaign(campaign_identifier: str, payload: CampaignUpdateRequest):
     conn = get_conn()
     cur = conn.cursor()
     ensure_campaign_schema(conn)
+    campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
+    if campaign_id is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+
+    redirect_url = _normalize_redirect_url(payload.redirect_url)
     cur.execute(
-        "SELECT id, slug FROM campaigns WHERE tracker_slug = %s",
-        [tracker_slug],
+        """
+        UPDATE campaigns
+        SET redirect_url = %s
+        WHERE id = %s
+        """,
+        [redirect_url, campaign_id],
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {
+        "ok": True,
+        "id": campaign_id,
+        "redirect_url": redirect_url,
+    }
+
+
+def _track_campaign_visit_and_resolve_destination(campaign_identifier: str, request: Request) -> str:
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
+    if campaign_id is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Tracker not found.")
+    cur.execute(
+        "SELECT id, slug, redirect_url FROM campaigns WHERE id = %s",
+        [campaign_id],
     )
     row = cur.fetchone()
     if not row:
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Tracker not found.")
-    campaign_id, campaign_slug = row
+    campaign_id, campaign_slug, redirect_url = row
 
     forwarded = request.headers.get("x-forwarded-for", "")
     ip_address = (forwarded.split(",")[0].strip() if forwarded else "") or (
@@ -1111,7 +1161,13 @@ def tracker_redirect(tracker_slug: str, request: Request):
     conn.commit()
     cur.close()
     conn.close()
-    destination = f"/campaigns/{campaign_slug or campaign_id}"
+    destination = redirect_url or f"/campaigns/{campaign_slug or campaign_id}"
+    return destination
+
+
+@app.get("/campaigns/{campaign_identifier}/tracker", response_class=HTMLResponse)
+def tracker_redirect(campaign_identifier: str, request: Request):
+    destination = _track_campaign_visit_and_resolve_destination(campaign_identifier, request)
     return HTMLResponse(
         content=f"""
         <!doctype html>
@@ -1122,7 +1178,41 @@ def tracker_redirect(tracker_slug: str, request: Request):
             <title>Redirecting…</title>
           </head>
           <body>
-            <p>Redirecting to campaign page…</p>
+            <p>Redirecting…</p>
+            <p><a href="{destination}">Continue</a></p>
+            <script>window.location.replace("{destination}");</script>
+          </body>
+        </html>
+        """
+    )
+
+
+@app.get("/t/{tracker_slug}", response_class=HTMLResponse)
+def tracker_redirect_by_slug(tracker_slug: str, request: Request):
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    cur.execute(
+        "SELECT slug, id FROM campaigns WHERE tracker_slug = %s",
+        [tracker_slug],
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Tracker not found.")
+    destination = _track_campaign_visit_and_resolve_destination(row[0] or str(row[1]), request)
+    return HTMLResponse(
+        content=f"""
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <meta http-equiv="refresh" content="0; url={destination}" />
+            <title>Redirecting…</title>
+          </head>
+          <body>
+            <p>Redirecting…</p>
             <p><a href="{destination}">Continue</a></p>
             <script>window.location.replace("{destination}");</script>
           </body>
