@@ -110,7 +110,28 @@ def fetch(offset):
 
 
 def upsert(cur, p):
+    cur.execute(
+        """
+        SELECT owners_name_1, owners_name_2
+        FROM properties
+        WHERE parcel_id = %s
+        """,
+        (p["parcel_id"],),
+    )
+    existing_owner_row = cur.fetchone()
+
+    ownership_changed = False
+    if existing_owner_row:
+        existing_owner_1, existing_owner_2 = existing_owner_row
+        new_owner_1 = p.get("owners_name_1")
+        new_owner_2 = p.get("owners_name_2")
+
+        ownership_changed = (existing_owner_1 or "") != (new_owner_1 or "") or (
+            existing_owner_2 or ""
+        ) != (new_owner_2 or "")
+
     cur.execute(INSERT_SQL, tuple(p.get(col) for col in UPSERT_COLUMNS))
+    return ownership_changed
 
 
 def run():
@@ -120,6 +141,7 @@ def run():
 
     offset = 0
     total = 0
+    ownership_changes = 0
 
     while True:
         batch = fetch(offset)
@@ -133,16 +155,19 @@ def run():
             if not p["parcel_id"]:
                 continue
 
-            upsert(cur, p)
+            if upsert(cur, p):
+                ownership_changes += 1
             total += 1
 
         conn.commit()
         print(f"Processed: {total}")
+        print(f"Ownership changes detected so far: {ownership_changes}")
 
         offset += LIMIT
 
     cur.close()
     conn.close()
+    print(f"Ownership changes detected: {ownership_changes}")
 
 
 if __name__ == "__main__":
