@@ -255,6 +255,14 @@ const getMailingAddressLines = (deal) => (
 
 const formatMailingAddress = (deal) => getMailingAddressLines(deal).join(", ");
 
+const dashboardPanelStyle = {
+  border: "1px solid #d9d9d9",
+  borderRadius: 8,
+  padding: 12,
+  marginBottom: 16,
+  backgroundColor: "#fafafa",
+};
+
 const escapeCsvValue = (value) => {
   const text = String(value ?? "");
   if (text.includes("\"") || text.includes(",") || text.includes("\n")) {
@@ -841,108 +849,111 @@ const DealsDashboard = () => {
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>🏡 Real Estate Results Dashboard</h1>
+      <section style={dashboardPanelStyle}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
+          <input
+            placeholder={
+              searchMode === "address"
+                ? "Search address..."
+                : searchMode === "owner"
+                  ? "Search owner..."
+                  : "Search address or owner..."
+            }
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
+          />
+          <select value={searchMode} onChange={(e) => setSearchMode(e.target.value)}>
+            <option value="all">All fields</option>
+            <option value="address">Address</option>
+            <option value="owner">Owner</option>
+          </select>
+          <button onClick={() => searchDeals(search)}>Search</button>
+        </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
-        <input
-          placeholder={
-            searchMode === "address"
-              ? "Search address..."
-              : searchMode === "owner"
-                ? "Search owner..."
-                : "Search address or owner..."
-          }
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
-        />
-        <select value={searchMode} onChange={(e) => setSearchMode(e.target.value)}>
-          <option value="all">All fields</option>
-          <option value="address">Address</option>
-          <option value="owner">Owner</option>
-        </select>
-        <button onClick={() => searchDeals(search)}>Search</button>
-      </div>
-
-      <fieldset
-        style={{
-          border: "1px solid #ccc",
-          borderRadius: 6,
-          padding: 12,
-          marginBottom: 16,
-        }}
-      >
-        <legend style={{ padding: "0 6px", fontWeight: "bold" }}>Include Filters</legend>
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 4,
-              padding: 8,
-              minWidth: 240,
-              maxHeight: 180,
-              overflowY: "auto",
-            }}
-          >
-            <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <input
-                type="checkbox"
-                checked={!selectedMunis.length}
-                onChange={(e) => {
-                  if (e.target.checked) setSelectedMunis([]);
-                }}
-              />
-              All municipalities
-            </label>
-
-            {Object.entries(MUNICIPALITIES).map(([code, name]) => (
+        <fieldset
+          style={{
+            border: "1px solid #ccc",
+            borderRadius: 6,
+            padding: 12,
+            marginBottom: 0,
+          }}
+        >
+          <legend style={{ padding: "0 6px", fontWeight: "bold" }}>Include Filters</legend>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: 4,
+                padding: 8,
+                minWidth: 240,
+                maxHeight: 180,
+                overflowY: "auto",
+              }}
+            >
               <label
-                key={code}
                 style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}
               >
                 <input
                   type="checkbox"
-                  checked={selectedMunis.includes(code)}
-                  onChange={() => toggleMunicipality(code)}
+                  checked={!selectedMunis.length}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedMunis([]);
+                  }}
                 />
-                {name}
+                All municipalities
+              </label>
+
+              {Object.entries(MUNICIPALITIES).map(([code, name]) => (
+                <label
+                  key={code}
+                  style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedMunis.includes(code)}
+                    onChange={() => toggleMunicipality(code)}
+                  />
+                  {name}
+                </label>
+              ))}
+            </div>
+
+            <input
+              type="number"
+              placeholder="Min Year Built"
+              value={minYearBuilt}
+              onChange={(e) => setMinYearBuilt(e.target.value)}
+            />
+
+            <input
+              type="number"
+              placeholder="Max Year Built"
+              value={maxYearBuilt}
+              onChange={(e) => setMaxYearBuilt(e.target.value)}
+            />
+
+            {includeFilterToggles.map((filter) => (
+              <label
+                key={filter.key}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={filter.checked}
+                  onChange={(e) => filter.onChange(e.target.checked)}
+                />
+                {filter.label}
               </label>
             ))}
+
+            <button onClick={applyFilters}>Apply Filters</button>
+            <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
+              {creatingCampaign ? "Creating Campaign..." : "Create Campaign"}
+            </button>
           </div>
-
-          <input
-            type="number"
-            placeholder="Min Year Built"
-            value={minYearBuilt}
-            onChange={(e) => setMinYearBuilt(e.target.value)}
-          />
-
-          <input
-            type="number"
-            placeholder="Max Year Built"
-            value={maxYearBuilt}
-            onChange={(e) => setMaxYearBuilt(e.target.value)}
-          />
-
-          {includeFilterToggles.map((filter) => (
-            <label
-              key={filter.key}
-              style={{ display: "flex", alignItems: "center", gap: 6 }}
-            >
-              <input
-                type="checkbox"
-                checked={filter.checked}
-                onChange={(e) => filter.onChange(e.target.checked)}
-              />
-              {filter.label}
-            </label>
-          ))}
-
-          <button onClick={applyFilters}>Apply Filters</button>
-          <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
-            {creatingCampaign ? "Creating Campaign..." : "Create Campaign"}
-          </button>
-        </div>
-      </fieldset>
+        </fieldset>
+      </section>
 
       {loading && <p>Loading results...</p>}
       {error && <p style={{ color: "crimson" }}>{error}</p>}
@@ -1240,66 +1251,68 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
       {campaign && (
         <>
           <h1>📬 {campaign.name}</h1>
-          <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
-          <p>Tracker visits: {(campaign.visitors || 0).toLocaleString()}</p>
-          <p>
-            Tracker URL:{" "}
-            <a href={currentTrackerUrl} target="_blank" rel="noreferrer">
-              {currentTrackerUrl}
-            </a>
-          </p>
-          <p>
-            Current Redirect URL:{" "}
-            <a href={currentFullRedirectUrl} target="_blank" rel="noreferrer">
-              {currentFullRedirectUrl}
-            </a>
-          </p>
-          <div style={{ marginBottom: 10 }}>
-            <label htmlFor="campaign-redirect-url">Change Redirect URL to: </label>
-            <input
-              id="campaign-redirect-url"
-              type="text"
-              value={redirectUrlInput}
-              onChange={(e) => setRedirectUrlInput(e.target.value)}
-              placeholder={`/campaigns/${campaign.slug || campaign.id}`}
-              style={{ minWidth: 360, marginRight: 8 }}
-            />
-            <button onClick={saveCampaignRedirectUrl} disabled={savingRedirectUrl || loading}>
-              {savingRedirectUrl ? "Saving..." : "Save Redirect URL"}
-            </button>
-          </div>
-          <p>
-            Showing {(pagination.total || campaign.results_count || 0).toLocaleString()} properties
-            snapshotted at campaign creation, with{" "}
-            {(campaign.unique_mailing_addresses_count || 0).toLocaleString()} unique mailing addresses
-            after deduplication.
-          </p>
-          <p>
-            Page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
-            {deals.length.toLocaleString()} shown on this page)
-          </p>
-          <div style={{ marginBottom: 10 }}>
-            <button
-              onClick={exportCampaignSnapshotToCsv}
-              disabled={loading || exportingSnapshot}
-            >
-              {exportingSnapshot ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
-            </button>
-            <button
-              style={{ marginLeft: 8 }}
-              onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-              disabled={loading || page <= 1}
-            >
-              Previous
-            </button>
-            <button
-              style={{ marginLeft: 8 }}
-              onClick={() => setPage((prev) => prev + 1)}
-              disabled={loading || page >= pagination.total_pages}
-            >
-              Next
-            </button>
-          </div>
+          <section style={dashboardPanelStyle}>
+            <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
+            <p>Tracker visits: {(campaign.visitors || 0).toLocaleString()}</p>
+            <p>
+              Tracker URL:{" "}
+              <a href={currentTrackerUrl} target="_blank" rel="noreferrer">
+                {currentTrackerUrl}
+              </a>
+            </p>
+            <p>
+              Current Redirect URL:{" "}
+              <a href={currentFullRedirectUrl} target="_blank" rel="noreferrer">
+                {currentFullRedirectUrl}
+              </a>
+            </p>
+            <div style={{ marginBottom: 10 }}>
+              <label htmlFor="campaign-redirect-url">Change Redirect URL to: </label>
+              <input
+                id="campaign-redirect-url"
+                type="text"
+                value={redirectUrlInput}
+                onChange={(e) => setRedirectUrlInput(e.target.value)}
+                placeholder={`/campaigns/${campaign.slug || campaign.id}`}
+                style={{ minWidth: 360, marginRight: 8 }}
+              />
+              <button onClick={saveCampaignRedirectUrl} disabled={savingRedirectUrl || loading}>
+                {savingRedirectUrl ? "Saving..." : "Save Redirect URL"}
+              </button>
+            </div>
+            <p>
+              Showing {(pagination.total || campaign.results_count || 0).toLocaleString()} properties
+              snapshotted at campaign creation, with{" "}
+              {(campaign.unique_mailing_addresses_count || 0).toLocaleString()} unique mailing addresses
+              after deduplication.
+            </p>
+            <p>
+              Page {pagination.page} of {Math.max(pagination.total_pages, 1)} (
+              {deals.length.toLocaleString()} shown on this page)
+            </p>
+            <div style={{ marginBottom: 0 }}>
+              <button
+                onClick={exportCampaignSnapshotToCsv}
+                disabled={loading || exportingSnapshot}
+              >
+                {exportingSnapshot ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
+              </button>
+              <button
+                style={{ marginLeft: 8 }}
+                onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                disabled={loading || page <= 1}
+              >
+                Previous
+              </button>
+              <button
+                style={{ marginLeft: 8 }}
+                onClick={() => setPage((prev) => prev + 1)}
+                disabled={loading || page >= pagination.total_pages}
+              >
+                Next
+              </button>
+            </div>
+          </section>
           <DealsTable deals={deals} />
         </>
       )}
