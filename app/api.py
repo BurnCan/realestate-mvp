@@ -679,40 +679,7 @@ def _fetch_campaign_deals(cur, campaign_id: int, *, limit: int, offset: int) -> 
 
 
 def _count_unique_campaign_mailing_addresses(cur, campaign_id: int) -> int:
-    cur.execute(
-        """
-        SELECT COUNT(DISTINCT normalized_address)
-        FROM (
-            SELECT
-                REGEXP_REPLACE(
-                    REGEXP_REPLACE(
-                        LOWER(
-                            TRIM(
-                                CONCAT_WS(
-                                    ', ',
-                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_1'), ''),
-                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_2'), ''),
-                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_3'), '')
-                                )
-                            )
-                        ),
-                        '\\bpa\\s+(\\d{5})\\s*-\\s*\\d+\\b',
-                        'pa \\1',
-                        'g'
-                    ),
-                    '[^a-z0-9 ]',
-                    '',
-                    'g'
-                ) AS normalized_address
-            FROM campaign_properties cp
-            WHERE cp.campaign_id = %s
-        ) normalized_addresses
-        WHERE normalized_address <> ''
-        """,
-        [campaign_id],
-    )
-    row = cur.fetchone()
-    return row[0] if row else 0
+    return len(_dedupe_campaign_mailing_rows(cur, campaign_id))
 
 
 def _sanitize_owner_name_for_export(owner_name: str | None) -> str:
@@ -738,67 +705,78 @@ def _sanitize_owner_name_for_export(owner_name: str | None) -> str:
     return f"{' '.join(given_names)} {last_name}".strip()
 
 
-def _fetch_campaign_unique_mailing_rows(cur, campaign_id: int) -> list[dict]:
+def _combine_mailing_address_parts(snapshot_data: dict | None) -> str:
+    if not isinstance(snapshot_data, dict):
+        return ""
+    parts = [
+        str(snapshot_data.get("mail_address_1") or "").strip(),
+        str(snapshot_data.get("mail_address_2") or "").strip(),
+        str(snapshot_data.get("mail_address_3") or "").strip(),
+    ]
+    return ", ".join(part for part in parts if part)
+
+
+def _normalize_mailing_address_for_dedupe(mailing_address: str | None) -> str:
+    text = _normalize_text(mailing_address)
+    if not text:
+        return ""
+
+    # Normalize ZIP+4 (or 9-digit ZIP) to 5 digits so equivalent addresses dedupe.
+    text = re.sub(r"\b(\d{5})\s*-\s*\d{4}\b", r"\1", text)
+    text = re.sub(r"\b(\d{5})\d{4}\b", r"\1", text)
+
+    # Keep only alphanumeric and spaces for stable matching.
+    return re.sub(r"[^a-z0-9 ]", "", text)
+
+
+def _fetch_campaign_rows_for_mailing_dedupe(cur, campaign_id: int) -> list[tuple[int, str, str]]:
     cur.execute(
         """
-        WITH campaign_rows AS (
-            SELECT
-                cp.id,
-                TRIM(cp.snapshot_data->>'owners_name_1') AS owner_name_1,
-                TRIM(
-                    CONCAT_WS(
-                        ', ',
-                        NULLIF(TRIM(cp.snapshot_data->>'mail_address_1'), ''),
-                        NULLIF(TRIM(cp.snapshot_data->>'mail_address_2'), ''),
-                        NULLIF(TRIM(cp.snapshot_data->>'mail_address_3'), '')
-                    )
-                ) AS mailing_address,
-                REGEXP_REPLACE(
-                    REGEXP_REPLACE(
-                        LOWER(
-                            TRIM(
-                                CONCAT_WS(
-                                    ', ',
-                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_1'), ''),
-                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_2'), ''),
-                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_3'), '')
-                                )
-                            )
-                        ),
-                        '\\bpa\\s+(\\d{5})\\s*-\\s*\\d+\\b',
-                        'pa \\1',
-                        'g'
-                    ),
-                    '[^a-z0-9 ]',
-                    '',
-                    'g'
-                ) AS normalized_address
-            FROM campaign_properties cp
-            WHERE cp.campaign_id = %s
-        ),
-        deduped AS (
-            SELECT DISTINCT ON (normalized_address)
-                id,
-                owner_name_1,
-                mailing_address,
-                normalized_address
-            FROM campaign_rows
-            WHERE normalized_address <> ''
-            ORDER BY normalized_address, id ASC
-        )
-        SELECT owner_name_1, mailing_address
-        FROM deduped
-        ORDER BY id ASC
+        SELECT cp.id, cp.snapshot_data->>'owners_name_1', cp.snapshot_data
+        FROM campaign_properties cp
+        WHERE cp.campaign_id = %s
+        ORDER BY cp.id ASC
         """,
         [campaign_id],
     )
     rows = cur.fetchall() or []
+
+    resolved_rows: list[tuple[int, str, str]] = []
+    for row_id, owner_name_1, snapshot_data in rows:
+        mailing_address = _combine_mailing_address_parts(snapshot_data)
+        resolved_rows.append((row_id, owner_name_1 or "", mailing_address))
+    return resolved_rows
+
+
+def _dedupe_campaign_mailing_rows(cur, campaign_id: int) -> list[dict]:
+    deduped: list[dict] = []
+    seen_normalized_addresses: set[str] = set()
+
+    for row_id, owner_name_1, mailing_address in _fetch_campaign_rows_for_mailing_dedupe(cur, campaign_id):
+        normalized_address = _normalize_mailing_address_for_dedupe(mailing_address)
+        if not normalized_address or normalized_address in seen_normalized_addresses:
+            continue
+
+        seen_normalized_addresses.add(normalized_address)
+        deduped.append(
+            {
+                "id": row_id,
+                "owner_name_1": _sanitize_owner_name_for_export(owner_name_1),
+                "mailing_address": mailing_address,
+            }
+        )
+
+    return deduped
+
+
+def _fetch_campaign_unique_mailing_rows(cur, campaign_id: int) -> list[dict]:
+    rows = _dedupe_campaign_mailing_rows(cur, campaign_id)
     return [
         {
-            "owner_name_1": _sanitize_owner_name_for_export(owner_name_1),
-            "mailing_address": mailing_address or "",
+            "owner_name_1": row["owner_name_1"],
+            "mailing_address": row["mailing_address"],
         }
-        for owner_name_1, mailing_address in rows
+        for row in rows
     ]
 
 
