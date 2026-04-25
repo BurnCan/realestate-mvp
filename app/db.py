@@ -103,6 +103,7 @@ REQUIRED_CAMPAIGN_COLUMNS = {
     "name": "TEXT",
     "slug": "TEXT UNIQUE",
     "tracker_slug": "TEXT UNIQUE",
+    "redirect_url": "TEXT",
     "filters_snapshot": "JSONB NOT NULL DEFAULT '{}'::JSONB",
     "results_count": "INT NOT NULL DEFAULT 0",
     "created_at": "TIMESTAMP DEFAULT NOW()",

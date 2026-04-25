@@ -1061,6 +1061,8 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [exportingSnapshot, setExportingSnapshot] = useState(false);
+  const [redirectUrlInput, setRedirectUrlInput] = useState("");
+  const [savingRedirectUrl, setSavingRedirectUrl] = useState(false);
 
   useEffect(() => {
     setPage(1);
@@ -1079,6 +1081,7 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
         const campaignData = campaignResponse.data;
         setCampaign(campaignData);
         setDeals(campaignData?.deals || []);
+        setRedirectUrlInput(campaignData?.redirect_url || "");
         setPagination(
           campaignData?.pagination || {
             page,
@@ -1125,6 +1128,25 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
     }
   };
 
+  const saveCampaignRedirectUrl = async () => {
+    if (!campaignIdentifier) return;
+    setSavingRedirectUrl(true);
+    setError("");
+    try {
+      const response = await axios.patch(
+        `${API}/campaigns/${campaignIdentifier}`,
+        { redirect_url: redirectUrlInput.trim() || null },
+      );
+      setCampaign((prevCampaign) => (
+        prevCampaign ? { ...prevCampaign, redirect_url: response?.data?.redirect_url || null } : prevCampaign
+      ));
+    } catch {
+      setError("Could not save tracker redirect URL.");
+    } finally {
+      setSavingRedirectUrl(false);
+    }
+  };
+
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       {loading && <p>Loading campaign...</p>}
@@ -1133,6 +1155,27 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
         <>
           <h1>📬 {campaign.name}</h1>
           <p>Created: {formatOwnershipChangeDate(campaign.created_at)}</p>
+          <p>Tracker visits: {(campaign.visitors || 0).toLocaleString()}</p>
+          <p>
+            Tracker URL:{" "}
+            <a href={`${API}${campaign.tracker_path}`} target="_blank" rel="noreferrer">
+              {API}{campaign.tracker_path}
+            </a>
+          </p>
+          <div style={{ marginBottom: 10 }}>
+            <label htmlFor="campaign-redirect-url">Tracker redirect URL: </label>
+            <input
+              id="campaign-redirect-url"
+              type="text"
+              value={redirectUrlInput}
+              onChange={(e) => setRedirectUrlInput(e.target.value)}
+              placeholder={`/campaigns/${campaign.slug || campaign.id}`}
+              style={{ minWidth: 360, marginRight: 8 }}
+            />
+            <button onClick={saveCampaignRedirectUrl} disabled={savingRedirectUrl || loading}>
+              {savingRedirectUrl ? "Saving..." : "Save Redirect URL"}
+            </button>
+          </div>
           <p>
             Showing {(pagination.total || campaign.results_count || 0).toLocaleString()} properties
             snapshotted at campaign creation, with{" "}
