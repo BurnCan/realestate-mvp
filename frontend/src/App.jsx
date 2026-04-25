@@ -256,11 +256,28 @@ const getMailingAddressLines = (deal) => (
 const formatMailingAddress = (deal) => getMailingAddressLines(deal).join(", ");
 
 const dashboardPanelStyle = {
-  border: "1px solid #d9d9d9",
+  border: "1px solid var(--border)",
   borderRadius: 8,
   padding: 12,
   marginBottom: 16,
-  backgroundColor: "#fafafa",
+  backgroundColor: "var(--code-bg)",
+  color: "var(--text-h)",
+};
+
+const formControlStyle = {
+  backgroundColor: "var(--bg)",
+  color: "var(--text-h)",
+  border: "1px solid var(--border)",
+  borderRadius: 6,
+  padding: "8px 10px",
+};
+
+const primaryButtonStyle = {
+  ...formControlStyle,
+  backgroundColor: "var(--accent-bg)",
+  border: "1px solid var(--accent-border)",
+  fontWeight: 600,
+  cursor: "pointer",
 };
 
 const escapeCsvValue = (value) => {
@@ -862,33 +879,40 @@ const DealsDashboard = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && searchDeals(search)}
+            style={formControlStyle}
           />
-          <select value={searchMode} onChange={(e) => setSearchMode(e.target.value)}>
+          <select
+            value={searchMode}
+            onChange={(e) => setSearchMode(e.target.value)}
+            style={formControlStyle}
+          >
             <option value="all">All fields</option>
             <option value="address">Address</option>
             <option value="owner">Owner</option>
           </select>
-          <button onClick={() => searchDeals(search)}>Search</button>
+          <button onClick={() => searchDeals(search)} style={primaryButtonStyle}>Search</button>
         </div>
 
         <fieldset
           style={{
-            border: "1px solid #ccc",
+            border: "1px solid var(--border)",
             borderRadius: 6,
             padding: 12,
             marginBottom: 0,
+            backgroundColor: "var(--social-bg)",
           }}
         >
           <legend style={{ padding: "0 6px", fontWeight: "bold" }}>Include Filters</legend>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
             <div
               style={{
-                border: "1px solid #ddd",
+                border: "1px solid var(--border)",
                 borderRadius: 4,
                 padding: 8,
                 minWidth: 240,
                 maxHeight: 180,
                 overflowY: "auto",
+                backgroundColor: "var(--bg)",
               }}
             >
               <label
@@ -900,6 +924,7 @@ const DealsDashboard = () => {
                   onChange={(e) => {
                     if (e.target.checked) setSelectedMunis([]);
                   }}
+                  style={{ accentColor: "var(--accent)" }}
                 />
                 All municipalities
               </label>
@@ -913,6 +938,7 @@ const DealsDashboard = () => {
                     type="checkbox"
                     checked={selectedMunis.includes(code)}
                     onChange={() => toggleMunicipality(code)}
+                    style={{ accentColor: "var(--accent)" }}
                   />
                   {name}
                 </label>
@@ -921,13 +947,14 @@ const DealsDashboard = () => {
 
             <div
               style={{
-                border: "1px solid #ddd",
+                border: "1px solid var(--border)",
                 borderRadius: 4,
                 padding: 8,
                 minWidth: 220,
                 display: "flex",
                 flexDirection: "column",
                 gap: 6,
+                backgroundColor: "var(--bg)",
               }}
             >
               {includeFilterToggles.map((filter) => (
@@ -939,6 +966,7 @@ const DealsDashboard = () => {
                     type="checkbox"
                     checked={filter.checked}
                     onChange={(e) => filter.onChange(e.target.checked)}
+                    style={{ accentColor: "var(--accent)" }}
                   />
                   {filter.label}
                 </label>
@@ -951,6 +979,7 @@ const DealsDashboard = () => {
                 placeholder="Min Year Built"
                 value={minYearBuilt}
                 onChange={(e) => setMinYearBuilt(e.target.value)}
+                style={formControlStyle}
               />
 
               <input
@@ -958,10 +987,15 @@ const DealsDashboard = () => {
                 placeholder="Max Year Built"
                 value={maxYearBuilt}
                 onChange={(e) => setMaxYearBuilt(e.target.value)}
+                style={formControlStyle}
               />
 
-              <button onClick={applyFilters}>Apply Filters</button>
-              <button onClick={createCampaignFromCurrentFilters} disabled={creatingCampaign}>
+              <button onClick={applyFilters} style={primaryButtonStyle}>Apply Filters</button>
+              <button
+                onClick={createCampaignFromCurrentFilters}
+                disabled={creatingCampaign}
+                style={primaryButtonStyle}
+              >
                 {creatingCampaign ? "Creating Campaign..." : "Create Campaign"}
               </button>
             </div>
