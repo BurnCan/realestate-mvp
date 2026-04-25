@@ -187,6 +187,7 @@ const matchesStatusFilters = ({
   sheriffSaleOnly,
   ownerOccupantOnly,
   recentDivorceOnly,
+  ownershipChangeDateOnly,
 }) => {
   const selectedFilters = [
     distressedOnly && isDistressedProperty(deal),
@@ -194,10 +195,16 @@ const matchesStatusFilters = ({
     sheriffSaleOnly && isSheriffSaleProperty(deal),
     ownerOccupantOnly && isOwnerOccupantProperty(deal),
     recentDivorceOnly && Boolean(deal.recent_divorce),
+    ownershipChangeDateOnly && Boolean(String(deal.ownership_change_date || "").trim()),
   ];
 
   const anyFilterSelected =
-    distressedOnly || bankOwnedOnly || sheriffSaleOnly || ownerOccupantOnly || recentDivorceOnly;
+    distressedOnly
+    || bankOwnedOnly
+    || sheriffSaleOnly
+    || ownerOccupantOnly
+    || recentDivorceOnly
+    || ownershipChangeDateOnly;
   return anyFilterSelected ? selectedFilters.some(Boolean) : true;
 };
 
@@ -218,6 +225,7 @@ const doesDealMatchFrontendFilters = ({
   sheriffSaleOnly = false,
   ownerOccupantOnly = false,
   recentDivorceOnly = false,
+  ownershipChangeDateOnly = false,
   parsedMinYearBuilt,
   parsedMaxYearBuilt,
   enforceMunicipalityCheck = false,
@@ -229,6 +237,7 @@ const doesDealMatchFrontendFilters = ({
     sheriffSaleOnly,
     ownerOccupantOnly,
     recentDivorceOnly,
+    ownershipChangeDateOnly,
   })
   && matchesYearBuiltRange({
     deal,
@@ -449,6 +458,7 @@ const DealsDashboard = () => {
   const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
   const [showOwnerOccupantOnly, setShowOwnerOccupantOnly] = useState(false);
   const [showRecentDivorceOnly, setShowRecentDivorceOnly] = useState(false);
+  const [showOwnershipChangeDateOnly, setShowOwnershipChangeDateOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
     page: 1,
@@ -488,6 +498,12 @@ const DealsDashboard = () => {
       checked: showRecentDivorceOnly,
       onChange: setShowRecentDivorceOnly,
     },
+    {
+      key: "ownershipChangeDate",
+      label: "Ownership change date",
+      checked: showOwnershipChangeDateOnly,
+      onChange: setShowOwnershipChangeDateOnly,
+    },
   ];
 
   const fetchDeals = ({
@@ -496,6 +512,7 @@ const DealsDashboard = () => {
     sheriffSaleOnly = false,
     ownerOccupantOnly = false,
     recentDivorceOnly = false,
+    ownershipChangeDateOnly = false,
     pageNumber = 1,
   } = {}) => {
     setLoading(true);
@@ -514,6 +531,7 @@ const DealsDashboard = () => {
           bank_owned_only: bankOwnedOnly || undefined,
           sheriff_sale_only: sheriffSaleOnly || undefined,
           recent_divorce_only: recentDivorceOnly || undefined,
+          ownership_change_date_only: ownershipChangeDateOnly || undefined,
           owner_occupant_only: ownerOccupantOnly || undefined,
           limit: 50,
           page: pageNumber,
@@ -536,6 +554,7 @@ const DealsDashboard = () => {
               sheriffSaleOnly,
               ownerOccupantOnly,
               recentDivorceOnly,
+              ownershipChangeDateOnly,
             }) && matchesYearBuiltRange({
               deal,
               minYearBuilt: parsedMinYearBuilt,
@@ -566,6 +585,7 @@ const DealsDashboard = () => {
         sheriffSaleOnly: showSheriffSaleOnly,
         ownerOccupantOnly: showOwnerOccupantOnly,
         recentDivorceOnly: showRecentDivorceOnly,
+        ownershipChangeDateOnly: showOwnershipChangeDateOnly,
         pageNumber: 1,
       });
     }
@@ -591,6 +611,7 @@ const DealsDashboard = () => {
               sheriffSaleOnly: showSheriffSaleOnly,
               ownerOccupantOnly: showOwnerOccupantOnly,
               recentDivorceOnly: showRecentDivorceOnly,
+              ownershipChangeDateOnly: showOwnershipChangeDateOnly,
             }) && matchesMunicipality(deal, selectedMunis) && matchesYearBuiltRange({
               deal,
               minYearBuilt: parsedMinYearBuilt,
@@ -628,6 +649,7 @@ const DealsDashboard = () => {
       sheriffSaleOnly: showSheriffSaleOnly,
       ownerOccupantOnly: showOwnerOccupantOnly,
       recentDivorceOnly: showRecentDivorceOnly,
+      ownershipChangeDateOnly: showOwnershipChangeDateOnly,
       pageNumber: 1,
     });
   };
@@ -655,6 +677,7 @@ const DealsDashboard = () => {
       const sheriffSaleOnly = showSheriffSaleOnly;
       const ownerOccupantOnly = showOwnerOccupantOnly;
       const recentDivorceOnly = showRecentDivorceOnly;
+      const ownershipChangeDateOnly = showOwnershipChangeDateOnly;
       const parsedMinYearBuilt = minYearBuilt ? Number(minYearBuilt) : undefined;
       const parsedMaxYearBuilt = maxYearBuilt ? Number(maxYearBuilt) : undefined;
       const uniqueParcelIds = new Set();
@@ -677,6 +700,7 @@ const DealsDashboard = () => {
             sheriffSaleOnly,
             ownerOccupantOnly,
             recentDivorceOnly,
+            ownershipChangeDateOnly,
             parsedMinYearBuilt,
             parsedMaxYearBuilt,
             enforceMunicipalityCheck: true,
@@ -695,6 +719,7 @@ const DealsDashboard = () => {
           bank_owned_only: bankOwnedOnly || undefined,
           sheriff_sale_only: sheriffSaleOnly || undefined,
           recent_divorce_only: recentDivorceOnly || undefined,
+          ownership_change_date_only: ownershipChangeDateOnly || undefined,
           owner_occupant_only: ownerOccupantOnly || undefined,
           limit,
         };
@@ -744,6 +769,7 @@ const DealsDashboard = () => {
         sheriff_sale_only: showSheriffSaleOnly,
         owner_occupant_only: showOwnerOccupantOnly,
         recent_divorce_only: showRecentDivorceOnly,
+        ownership_change_date_only: showOwnershipChangeDateOnly,
         search_query: isSearchMode && search.trim() ? search.trim() : undefined,
         search_mode: searchMode,
       };
@@ -794,6 +820,7 @@ const DealsDashboard = () => {
       sheriffSaleOnly: showSheriffSaleOnly,
       ownerOccupantOnly: showOwnerOccupantOnly,
       recentDivorceOnly: showRecentDivorceOnly,
+      ownershipChangeDateOnly: showOwnershipChangeDateOnly,
       pageNumber: page + 1,
     });
   };
@@ -806,6 +833,7 @@ const DealsDashboard = () => {
       sheriffSaleOnly: showSheriffSaleOnly,
       ownerOccupantOnly: showOwnerOccupantOnly,
       recentDivorceOnly: showRecentDivorceOnly,
+      ownershipChangeDateOnly: showOwnershipChangeDateOnly,
       pageNumber: page - 1,
     });
   };

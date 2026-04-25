@@ -40,6 +40,7 @@ class CampaignCreateRequest(BaseModel):
     sheriff_sale_only: bool = False
     owner_occupant_only: bool = False
     recent_divorce_only: bool = False
+    ownership_change_date_only: bool = False
     search_query: str | None = None
     search_mode: str = "all"
 
@@ -274,6 +275,7 @@ def _build_filtered_deals_query(
     sheriff_sale_only: bool = False,
     owner_occupant_only: bool = False,
     recent_divorce_only: bool = False,
+    ownership_change_date_only: bool = False,
 ) -> tuple[str, list]:
     base_query = """
         SELECT
@@ -351,6 +353,8 @@ def _build_filtered_deals_query(
             params.append(sheriff_matches)
     if recent_divorce_only:
         status_conditions.append("COALESCE(recent_divorce, FALSE) IS TRUE")
+    if ownership_change_date_only:
+        status_conditions.append("NULLIF(BTRIM(COALESCE(CAST(ownership_change_date AS TEXT), '')), '') IS NOT NULL")
     if owner_occupant_only:
         normalized_property_address = _normalize_owner_occupant_sql("address")
         normalized_mailing_address = _normalize_owner_occupant_sql(
@@ -455,6 +459,7 @@ def get_deals(
     sheriff_sale_only: bool = False,
     owner_occupant_only: bool = False,
     recent_divorce_only: bool = False,
+    ownership_change_date_only: bool = False,
 ):
     conn = get_conn()
     cur = conn.cursor()
@@ -468,6 +473,7 @@ def get_deals(
         sheriff_sale_only=sheriff_sale_only,
         owner_occupant_only=owner_occupant_only,
         recent_divorce_only=recent_divorce_only,
+        ownership_change_date_only=ownership_change_date_only,
     )
     page = max(page, 1)
     limit = max(limit, 1)
@@ -676,6 +682,8 @@ def _row_matches_campaign_filters(row: tuple, payload: CampaignCreateRequest, se
         return False
     if payload.recent_divorce_only and not bool(deal.get("recent_divorce")):
         return False
+    if payload.ownership_change_date_only and not str(deal.get("ownership_change_date") or "").strip():
+        return False
 
     return True
 
@@ -704,6 +712,7 @@ def _resolve_campaign_property_rows(cur, payload: CampaignCreateRequest) -> list
         sheriff_sale_only=payload.sheriff_sale_only,
         owner_occupant_only=payload.owner_occupant_only,
         recent_divorce_only=payload.recent_divorce_only,
+        ownership_change_date_only=payload.ownership_change_date_only,
     )
     cur.execute(f"{query} ORDER BY parcel_id ASC")
     return cur.fetchall()
