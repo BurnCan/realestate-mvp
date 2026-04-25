@@ -48,16 +48,49 @@ Frontend:
 - `python scripts/divorce_scraper_prototype.py --search-url "https://<court-site>/search" --query "divorce" --out divorce_results.csv`
   - The prototype now iterates through **all available result pages** (via `Next` links or `?page=` fallback) instead of stopping after page 1.
 
+## Data ingestion & scraper scripts
+
+### `scripts/run_ingest.py`
+
+- Run:
+
+```bash
+python scripts/run_ingest.py
+```
+
+- What it does:
+  - Executes the main ingest pipeline (`app.ingest.run()`), which loads and processes source parcel/property data into the app database.
+  - Use this when you want to refresh the core property dataset before using the API/dashboard.
+
+### `scripts/pull_upcoming_sheriff_sales.py`
+
+> Note: the filename in this repo is `pull_upcoming_sheriff_sales.py` (one `r` in `sheriff`).
+
+- Run:
+
+```bash
+python scripts/pull_upcoming_sheriff_sales.py
+```
+
+- What it does:
+  - Calls Northampton County Sheriff Sale endpoints to get the **next sale date** and all listings for that date.
+  - Parses listing details (address, municipality, parcel, disposition, debt amount, attorney, case title, docket number).
+  - Writes the results to a CSV in the repo root named like `sheriff_sale_YYYY-MM-DD.csv`.
+
 ## Northampton divorce scraper
 
-- `python scripts/northampton_divorce_scraper.py`
-  - Pulls Northampton divorce case results and upserts them into the `divorce_cases` table with:
-    - `case_number`
-    - `case_participants`
-    - `case_category`
-    - `date_opened`
-    - `status`
-  - Also syncs `properties.recent_divorce`, `properties.divorce_case_status`, and `properties.divorce_date_opened` after each scraper run, so `/deals` and `/search` read precomputed values.
+### `scripts/northampton_divorce_scraper.py`
+
+- Run:
+
+```bash
+python scripts/northampton_divorce_scraper.py
+```
+
+- What it does:
+  - Uses Playwright to scrape Northampton divorce case-search results.
+  - Upserts case rows into `divorce_cases` (`case_number`, participants, normalized participants, category, opened date, status).
+  - Re-syncs divorce-related fields on `properties` after ingest (`recent_divorce`, `divorce_case_status`, `divorce_date_opened`) so `/deals` and `/search` use precomputed values.
 
 ## New API endpoint
 
