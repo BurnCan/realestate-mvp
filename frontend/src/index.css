@@ -55,9 +55,9 @@ body {
 }
 
 #root {
-  width: 1126px;
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
   text-align: center;
   min-height: 100svh;
   display: flex;
