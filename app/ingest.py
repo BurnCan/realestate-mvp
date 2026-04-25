@@ -1,7 +1,7 @@
 import requests
 
-from db import ensure_properties_schema, get_conn
-from parser import parse
+from app.db import ensure_properties_schema, get_conn
+from app.parser import parse
 
 URL = "https://gis.northamptoncounty.org/arcgisweb/rest/services/Assessment_Services/Land_Records_LGM/MapServer/0/query"
 LIMIT = 500
