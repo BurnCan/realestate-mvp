@@ -696,7 +696,7 @@ def _count_unique_campaign_mailing_addresses(cur, campaign_id: int) -> int:
                                 )
                             )
                         ),
-                        '\\bpa\\s+(\\d{5})-\\d{4}\\b',
+                        '\\bpa\\s+(\\d{5})\\s*-\\s*\\d+\\b',
                         'pa \\1',
                         'g'
                     ),
@@ -765,7 +765,7 @@ def _fetch_campaign_unique_mailing_rows(cur, campaign_id: int) -> list[dict]:
                                 )
                             )
                         ),
-                        '\\bpa\\s+(\\d{5})-\\d{4}\\b',
+                        '\\bpa\\s+(\\d{5})\\s*-\\s*\\d+\\b',
                         'pa \\1',
                         'g'
                     ),
