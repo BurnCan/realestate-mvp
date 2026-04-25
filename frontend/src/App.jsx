@@ -180,39 +180,6 @@ const getMailingAddressLines = (deal) => (
 
 const formatMailingAddress = (deal) => getMailingAddressLines(deal).join(", ");
 
-const normalizeMailingAddressForDedup = (mailingAddress) => (
-  String(mailingAddress || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\bpa\s+(\d{5})-\d{4}\b/g, "pa $1")
-    .replace(/[^a-z0-9 ]/g, "")
-);
-
-const normalizeDealMailingAddressForDedup = (deal) => (
-  normalizeMailingAddressForDedup(getMailingAddressLines(deal).join(", "))
-);
-
-const sanitizeOwnerNameForExport = (ownerName) => {
-  const value = String(ownerName || "").trim();
-  if (!value) return "";
-  const ampIndex = value.indexOf("&");
-  const firstOwnerOnly = ampIndex < 0 ? value : value.slice(0, ampIndex).trimEnd();
-
-  const withoutSuffixes = firstOwnerOnly
-    .split(/\s+/)
-    .filter((token) => !/^(et|al|jr|sr|iii|iv)\.?$/i.test(token))
-    .join(" ")
-    .trim();
-
-  if (!withoutSuffixes) return "";
-
-  const nameParts = withoutSuffixes.split(/\s+/);
-  if (nameParts.length < 2) return withoutSuffixes;
-
-  const [lastName, ...givenNames] = nameParts;
-  return `${givenNames.join(" ")} ${lastName}`.trim();
-};
-
 const escapeCsvValue = (value) => {
   const text = String(value ?? "");
   if (text.includes("\"") || text.includes(",") || text.includes("\n")) {
@@ -221,23 +188,14 @@ const escapeCsvValue = (value) => {
   return text;
 };
 
-const downloadOwnerMailingCsv = (deals, filenamePrefix = "owners-mailing-addresses") => {
+const downloadOwnerMailingCsvRows = (rows, filenamePrefix = "owners-mailing-addresses") => {
   const csvHeader = ["Owner Name 1", "Mailing Address"];
-  const seenAddresses = new Set();
-  const csvRows = deals
-    .map((deal) => ([
-      sanitizeOwnerNameForExport(deal.owners_name_1),
-      formatMailingAddress(deal),
-      normalizeDealMailingAddressForDedup(deal),
+  const csvRows = (rows || [])
+    .map((row) => ([
+      String(row?.owner_name_1 || "").trim(),
+      String(row?.mailing_address || "").trim(),
     ]))
-    .filter(([, , normalizedAddress]) => {
-      if (!normalizedAddress || seenAddresses.has(normalizedAddress)) {
-        return false;
-      }
-      seenAddresses.add(normalizedAddress);
-      return true;
-    })
-    .map(([ownerName, mailingAddress]) => [ownerName, mailingAddress]);
+    .filter(([, mailingAddress]) => mailingAddress !== "");
   const csvText = [
     csvHeader.map(escapeCsvValue).join(","),
     ...csvRows.map((row) => row.map(escapeCsvValue).join(",")),
@@ -1123,22 +1081,15 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
     setExportingSnapshot(true);
     setError("");
     try {
-      const firstResponse = await axios.get(`${API}/campaigns/${campaignIdentifier}`, {
-        params: { page: 1, limit: 250 },
-      });
-      const firstPageData = firstResponse.data || {};
-      const totalPages = Math.max(firstPageData?.pagination?.total_pages || 1, 1);
-      const allDeals = [...(firstPageData?.deals || [])];
-
-      for (let pageNumber = 2; pageNumber <= totalPages; pageNumber += 1) {
-        const response = await axios.get(`${API}/campaigns/${campaignIdentifier}`, {
-          params: { page: pageNumber, limit: 250 },
-        });
-        allDeals.push(...(response.data?.deals || []));
-      }
-
-      const campaignSlugOrId = firstPageData?.slug || firstPageData?.id || campaignIdentifier;
-      downloadOwnerMailingCsv(allDeals, `campaign-${campaignSlugOrId}-owners-mailing-addresses`);
+      const response = await axios.get(
+        `${API}/campaigns/${campaignIdentifier}/mailing-addresses`,
+      );
+      const mailingRows = response?.data?.rows || [];
+      const campaignSlugOrId = campaign?.slug || campaign?.id || campaignIdentifier;
+      downloadOwnerMailingCsvRows(
+        mailingRows,
+        `campaign-${campaignSlugOrId}-owners-mailing-addresses`,
+      );
     } catch {
       setError("Could not export campaign snapshot CSV. Make sure the API server is running.");
     } finally {
