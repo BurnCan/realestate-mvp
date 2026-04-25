@@ -188,14 +188,42 @@ const escapeCsvValue = (value) => {
   return text;
 };
 
+const trimZipToFiveDigits = (text) => (
+  String(text || "").replace(/\b(\d{5})(?:-?\d{4})\b/g, "$1")
+);
+
+const splitMailingAddressForExport = (mailingAddress) => {
+  const normalized = trimZipToFiveDigits(String(mailingAddress || "").trim());
+  if (!normalized) {
+    return { streetLine: "", cityStateZipLine: "" };
+  }
+
+  const commaIndex = normalized.indexOf(",");
+  if (commaIndex < 0) {
+    return { streetLine: normalized, cityStateZipLine: "" };
+  }
+
+  return {
+    streetLine: normalized.slice(0, commaIndex).trim(),
+    cityStateZipLine: normalized.slice(commaIndex + 1).trim(),
+  };
+};
+
+const buildOwnerMailingMultilineCell = (row) => {
+  const ownerName = String(row?.owner_name_1 || "").trim();
+  const { streetLine, cityStateZipLine } = splitMailingAddressForExport(row?.mailing_address);
+  const lines = [ownerName, streetLine, cityStateZipLine];
+  if (!lines.some((line) => line)) {
+    return "";
+  }
+  return lines.join("\n");
+};
+
 const downloadOwnerMailingCsvRows = (rows, filenamePrefix = "owners-mailing-addresses") => {
-  const csvHeader = ["Owner Name 1", "Mailing Address"];
+  const csvHeader = ["Owner + Mailing Address"];
   const csvRows = (rows || [])
-    .map((row) => ([
-      String(row?.owner_name_1 || "").trim(),
-      String(row?.mailing_address || "").trim(),
-    ]))
-    .filter(([, mailingAddress]) => mailingAddress !== "");
+    .map((row) => [buildOwnerMailingMultilineCell(row)])
+    .filter(([cellValue]) => cellValue !== "");
   const csvText = [
     csvHeader.map(escapeCsvValue).join(","),
     ...csvRows.map((row) => row.map(escapeCsvValue).join(",")),
