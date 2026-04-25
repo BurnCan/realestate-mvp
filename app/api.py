@@ -715,6 +715,93 @@ def _count_unique_campaign_mailing_addresses(cur, campaign_id: int) -> int:
     return row[0] if row else 0
 
 
+def _sanitize_owner_name_for_export(owner_name: str | None) -> str:
+    value = str(owner_name or "").strip()
+    if not value:
+        return ""
+
+    amp_index = value.find("&")
+    first_owner_only = value if amp_index < 0 else value[:amp_index].rstrip()
+    without_suffixes = " ".join(
+        token
+        for token in first_owner_only.split()
+        if not re.fullmatch(r"(et|al|jr|sr|iii|iv)\.?", token, flags=re.IGNORECASE)
+    ).strip()
+    if not without_suffixes:
+        return ""
+
+    name_parts = without_suffixes.split()
+    if len(name_parts) < 2:
+        return without_suffixes
+
+    last_name, *given_names = name_parts
+    return f"{' '.join(given_names)} {last_name}".strip()
+
+
+def _fetch_campaign_unique_mailing_rows(cur, campaign_id: int) -> list[dict]:
+    cur.execute(
+        """
+        WITH campaign_rows AS (
+            SELECT
+                cp.id,
+                TRIM(cp.snapshot_data->>'owners_name_1') AS owner_name_1,
+                TRIM(
+                    CONCAT_WS(
+                        ', ',
+                        NULLIF(TRIM(cp.snapshot_data->>'mail_address_1'), ''),
+                        NULLIF(TRIM(cp.snapshot_data->>'mail_address_2'), ''),
+                        NULLIF(TRIM(cp.snapshot_data->>'mail_address_3'), '')
+                    )
+                ) AS mailing_address,
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        LOWER(
+                            TRIM(
+                                CONCAT_WS(
+                                    ', ',
+                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_1'), ''),
+                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_2'), ''),
+                                    NULLIF(TRIM(cp.snapshot_data->>'mail_address_3'), '')
+                                )
+                            )
+                        ),
+                        '\\bpa\\s+(\\d{5})-\\d{4}\\b',
+                        'pa \\1',
+                        'g'
+                    ),
+                    '[^a-z0-9 ]',
+                    '',
+                    'g'
+                ) AS normalized_address
+            FROM campaign_properties cp
+            WHERE cp.campaign_id = %s
+        ),
+        deduped AS (
+            SELECT DISTINCT ON (normalized_address)
+                id,
+                owner_name_1,
+                mailing_address,
+                normalized_address
+            FROM campaign_rows
+            WHERE normalized_address <> ''
+            ORDER BY normalized_address, id ASC
+        )
+        SELECT owner_name_1, mailing_address
+        FROM deduped
+        ORDER BY id ASC
+        """,
+        [campaign_id],
+    )
+    rows = cur.fetchall() or []
+    return [
+        {
+            "owner_name_1": _sanitize_owner_name_for_export(owner_name_1),
+            "mailing_address": mailing_address or "",
+        }
+        for owner_name_1, mailing_address in rows
+    ]
+
+
 def _fetch_property_deals_by_parcel_ids(cur, parcel_ids: list[str]) -> list[dict]:
     if not parcel_ids:
         return []
@@ -967,6 +1054,26 @@ def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
             "total": total,
             "total_pages": max((total + limit - 1) // limit, 1),
         },
+    }
+
+
+@app.get("/campaigns/{campaign_identifier}/mailing-addresses")
+def get_campaign_mailing_addresses(campaign_identifier: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
+    if campaign_id is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+
+    mailing_rows = _fetch_campaign_unique_mailing_rows(cur, campaign_id)
+    cur.close()
+    conn.close()
+    return {
+        "count": len(mailing_rows),
+        "rows": mailing_rows,
     }
 
 
