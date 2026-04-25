@@ -1147,6 +1147,9 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
     }
   };
 
+  const currentTrackerUrl = campaign
+    ? new URL(`${API}${campaign.tracker_path}`, window.location.origin).toString()
+    : "";
   const currentRedirectDestination = campaign
     ? (campaign.redirect_url || `/campaigns/${campaign.slug || campaign.id}`)
     : "";
@@ -1165,8 +1168,8 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
           <p>Tracker visits: {(campaign.visitors || 0).toLocaleString()}</p>
           <p>
             Tracker URL:{" "}
-            <a href={`${API}${campaign.tracker_path}`} target="_blank" rel="noreferrer">
-              {API}{campaign.tracker_path}
+            <a href={currentTrackerUrl} target="_blank" rel="noreferrer">
+              {currentTrackerUrl}
             </a>
           </p>
           <p>
