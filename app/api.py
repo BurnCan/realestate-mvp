@@ -678,6 +678,43 @@ def _fetch_campaign_deals(cur, campaign_id: int, *, limit: int, offset: int) -> 
     return deals
 
 
+def _count_unique_campaign_mailing_addresses(cur, campaign_id: int) -> int:
+    cur.execute(
+        """
+        SELECT COUNT(DISTINCT normalized_address)
+        FROM (
+            SELECT
+                REGEXP_REPLACE(
+                    REGEXP_REPLACE(
+                        LOWER(
+                            TRIM(
+                                CONCAT_WS(
+                                    ' ',
+                                    COALESCE(cp.snapshot_data->>'mail_address_1', ''),
+                                    COALESCE(cp.snapshot_data->>'mail_address_2', ''),
+                                    COALESCE(cp.snapshot_data->>'mail_address_3', '')
+                                )
+                            )
+                        ),
+                        '\\bpa\\s+(\\d{5})-\\d{4}\\b',
+                        'pa \\1',
+                        'g'
+                    ),
+                    '[^a-z0-9 ]',
+                    '',
+                    'g'
+                ) AS normalized_address
+            FROM campaign_properties cp
+            WHERE cp.campaign_id = %s
+        ) normalized_addresses
+        WHERE normalized_address <> ''
+        """,
+        [campaign_id],
+    )
+    row = cur.fetchone()
+    return row[0] if row else 0
+
+
 def _fetch_property_deals_by_parcel_ids(cur, parcel_ids: list[str]) -> list[dict]:
     if not parcel_ids:
         return []
@@ -908,6 +945,7 @@ def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
         [campaign_id],
     )
     total = cur.fetchone()[0]
+    unique_mailing_addresses_count = _count_unique_campaign_mailing_addresses(cur, campaign_id)
     deals = _fetch_campaign_deals(cur, campaign_id, limit=limit, offset=offset)
 
     cur.close()
@@ -921,6 +959,7 @@ def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
         "tracker_path": f"/t/{campaign[5]}",
         "filters_snapshot": campaign[6] or {},
         "visitors": campaign[7],
+        "unique_mailing_addresses_count": unique_mailing_addresses_count,
         "deals": deals,
         "pagination": {
             "page": page,
