@@ -33,7 +33,6 @@ class CampaignCreateRequest(BaseModel):
     parcel_ids: list[str] | None = None
     muni: str | None = None
     munis: str | None = None
-    min_score: float = 0
     min_year_built: int | None = None
     max_year_built: int | None = None
     distressed_only: bool = False
@@ -256,11 +255,10 @@ def _row_to_deal(row: tuple) -> dict:
         "mail_address_1": row[10],
         "mail_address_2": row[11],
         "mail_address_3": row[12],
-        "deal_score": row[13],
-        "sale_type": row[14],
-        "recent_divorce": row[15],
-        "divorce_case_status": row[16],
-        "divorce_date_opened": row[17],
+        "sale_type": row[13],
+        "recent_divorce": row[14],
+        "divorce_case_status": row[15],
+        "divorce_date_opened": row[16],
         "is_sheriff_sale": is_sheriff_sale_property(row[1], row[2]),
     }
 
@@ -269,7 +267,6 @@ def _build_filtered_deals_query(
     *,
     muni: str | None = None,
     munis: str | None = None,
-    min_score: float = 0,
     min_year_built: int | None = None,
     max_year_built: int | None = None,
     distressed_only: bool = False,
@@ -293,13 +290,12 @@ def _build_filtered_deals_query(
             mail_address_1,
             mail_address_2,
             mail_address_3,
-            deal_score,
             sale_type,
             recent_divorce,
             divorce_case_status,
             divorce_date_opened
         FROM properties
-        WHERE deal_score IS NOT NULL
+        WHERE TRUE
     """
 
     params: list = []
@@ -315,9 +311,6 @@ def _build_filtered_deals_query(
             base_query += " AND TRIM(COALESCE(muni, '')) = ANY(%s)"
             params.append(muni_candidates)
 
-    if min_score is not None:
-        base_query += " AND deal_score >= %s"
-        params.append(min_score)
     if min_year_built is not None:
         base_query += " AND year_built >= %s"
         params.append(min_year_built)
@@ -453,7 +446,6 @@ app.add_middleware(
 def get_deals(
     muni: str | None = None,
     munis: str | None = None,
-    min_score: float = 0,
     min_year_built: int | None = None,
     max_year_built: int | None = None,
     limit: int = 50,
@@ -469,7 +461,6 @@ def get_deals(
     base_query, params = _build_filtered_deals_query(
         muni=muni,
         munis=munis,
-        min_score=min_score,
         min_year_built=min_year_built,
         max_year_built=max_year_built,
         distressed_only=distressed_only,
@@ -492,7 +483,7 @@ def get_deals(
     cur.execute(unique_count_query, params)
     unique_total = cur.fetchone()[0]
 
-    query = f"{base_query} ORDER BY deal_score DESC, parcel_id ASC LIMIT %s OFFSET %s"
+    query = f"{base_query} ORDER BY parcel_id ASC LIMIT %s OFFSET %s"
     query_params = params + [limit, offset]
 
     cur.execute(query, query_params)
@@ -564,15 +555,14 @@ def search_deals(q: str, limit: int = 50, mode: str = "all"):
             mail_address_1,
             mail_address_2,
             mail_address_3,
-            deal_score,
             sale_type,
             recent_divorce,
             divorce_case_status,
             divorce_date_opened
         FROM properties
-        WHERE deal_score IS NOT NULL
+        WHERE TRUE
           AND {where_clause}
-        ORDER BY deal_score DESC, parcel_id ASC
+        ORDER BY parcel_id ASC
         LIMIT %s
         """,
         [*params, limit],
@@ -636,15 +626,14 @@ def _search_rows(cur, q: str, mode: str, limit: int = 100000):
             mail_address_1,
             mail_address_2,
             mail_address_3,
-            deal_score,
             sale_type,
             recent_divorce,
             divorce_case_status,
             divorce_date_opened
         FROM properties
-        WHERE deal_score IS NOT NULL
+        WHERE TRUE
           AND {where_clause}
-        ORDER BY deal_score DESC, parcel_id ASC
+        ORDER BY parcel_id ASC
         LIMIT %s
         """,
         [*params, limit],
@@ -658,13 +647,6 @@ def _row_matches_campaign_filters(row: tuple, payload: CampaignCreateRequest, se
     deal = _row_to_deal(row)
 
     if selected_munis and str(deal.get("muni") or "").strip() not in selected_munis:
-        return False
-
-    try:
-        score = float(deal.get("deal_score") or 0)
-    except (TypeError, ValueError):
-        score = 0
-    if score < float(payload.min_score or 0):
         return False
 
     year_built = deal.get("year_built")
@@ -715,7 +697,6 @@ def _resolve_campaign_property_rows(cur, payload: CampaignCreateRequest) -> list
     query, params = _build_filtered_deals_query(
         muni=payload.muni,
         munis=payload.munis,
-        min_score=payload.min_score,
         min_year_built=payload.min_year_built,
         max_year_built=payload.max_year_built,
         distressed_only=payload.distressed_only,
@@ -724,7 +705,7 @@ def _resolve_campaign_property_rows(cur, payload: CampaignCreateRequest) -> list
         owner_occupant_only=payload.owner_occupant_only,
         recent_divorce_only=payload.recent_divorce_only,
     )
-    cur.execute(f"{query} ORDER BY deal_score DESC, parcel_id ASC")
+    cur.execute(f"{query} ORDER BY parcel_id ASC")
     return cur.fetchall()
 
 
@@ -909,7 +890,6 @@ def _fetch_property_deals_by_parcel_ids(cur, parcel_ids: list[str]) -> list[dict
                 mail_address_1,
                 mail_address_2,
                 mail_address_3,
-                deal_score,
                 sale_type,
                 recent_divorce,
                 divorce_case_status,

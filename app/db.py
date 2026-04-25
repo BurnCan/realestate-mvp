@@ -41,7 +41,6 @@ REQUIRED_PROPERTY_COLUMNS = {
     "half_baths": "NUMERIC",
     "stories": "NUMERIC",
     "year_built": "INT",
-    "deal_score": "NUMERIC",
     "updated_at": "TIMESTAMP DEFAULT NOW()",
     # Raw ArcGIS attribute coverage
     "objectid": "BIGINT",

@@ -213,7 +213,6 @@ const matchesYearBuiltRange = ({ deal, minYearBuilt, maxYearBuilt }) => {
 const doesDealMatchFrontendFilters = ({
   deal,
   selectedMunis = [],
-  minScore = 0,
   distressedOnly = false,
   bankOwnedOnly = false,
   sheriffSaleOnly = false,
@@ -222,7 +221,6 @@ const doesDealMatchFrontendFilters = ({
   parsedMinYearBuilt,
   parsedMaxYearBuilt,
   enforceMunicipalityCheck = false,
-  enforceMinScoreCheck = false,
 }) => (
   matchesStatusFilters({
     deal,
@@ -238,7 +236,6 @@ const doesDealMatchFrontendFilters = ({
     maxYearBuilt: parsedMaxYearBuilt,
   })
   && (!enforceMunicipalityCheck || matchesMunicipality(deal, selectedMunis))
-  && (!enforceMinScoreCheck || (deal.deal_score ?? 0) >= minScore)
 );
 
 const getMailingAddressLines = (deal) => (
@@ -324,7 +321,6 @@ const DealsTable = ({ deals }) => (
         <th>Ownership Change Date</th>
         <th>Mailing Address</th>
         <th>Total Assessed Value</th>
-        <th>Deal Score</th>
         <th>Sale Type</th>
         <th>Status</th>
         <th>Owner Occupant</th>
@@ -336,7 +332,6 @@ const DealsTable = ({ deals }) => (
 
     <tbody>
       {deals.map((d) => {
-        const score = d.deal_score ?? 0;
         const totalAssessedValue = d.total_assessed_value ?? d.assessed_value ?? null;
         const isDistressed = isDistressedProperty(d);
         const isBankOwned = isBankOwnedProperty(d);
@@ -369,9 +364,6 @@ const DealsTable = ({ deals }) => (
               {totalAssessedValue != null
                 ? `$${totalAssessedValue.toLocaleString()}`
                 : "—"}
-            </td>
-            <td>
-              <b>{score.toFixed(2)}</b>
             </td>
             <td>{d.sale_type || "—"}</td>
             <td>
@@ -445,7 +437,6 @@ const Navigation = ({ currentPath, navigate }) => (
 const DealsDashboard = () => {
   const [deals, setDeals] = useState([]);
   const [selectedMunis, setSelectedMunis] = useState([]);
-  const [minScore, setMinScore] = useState(0);
   const [search, setSearch] = useState("");
   const [searchMode, setSearchMode] = useState("all");
   const [minYearBuilt, setMinYearBuilt] = useState("");
@@ -517,7 +508,6 @@ const DealsDashboard = () => {
       .get(`${API}/deals`, {
         params: {
           munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
-          min_score: minScore || 0,
           min_year_built: parsedMinYearBuilt,
           max_year_built: parsedMaxYearBuilt,
           distressed_only: distressedOnly || undefined,
@@ -601,7 +591,7 @@ const DealsDashboard = () => {
               sheriffSaleOnly: showSheriffSaleOnly,
               ownerOccupantOnly: showOwnerOccupantOnly,
               recentDivorceOnly: showRecentDivorceOnly,
-            }) && matchesMunicipality(deal, selectedMunis) && (deal.deal_score ?? 0) >= minScore && matchesYearBuiltRange({
+            }) && matchesMunicipality(deal, selectedMunis) && matchesYearBuiltRange({
               deal,
               minYearBuilt: parsedMinYearBuilt,
               maxYearBuilt: parsedMaxYearBuilt,
@@ -682,7 +672,6 @@ const DealsDashboard = () => {
           .filter((deal) => doesDealMatchFrontendFilters({
             deal,
             selectedMunis,
-            minScore,
             distressedOnly,
             bankOwnedOnly,
             sheriffSaleOnly,
@@ -691,7 +680,6 @@ const DealsDashboard = () => {
             parsedMinYearBuilt,
             parsedMaxYearBuilt,
             enforceMunicipalityCheck: true,
-            enforceMinScoreCheck: true,
           }))
           .forEach((deal) => {
             const parcelId = String(deal?.parcel_id || "").trim();
@@ -701,7 +689,6 @@ const DealsDashboard = () => {
         const limit = 500;
         const baseParams = {
           munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
-          min_score: minScore || 0,
           min_year_built: parsedMinYearBuilt,
           max_year_built: parsedMaxYearBuilt,
           distressed_only: distressedOnly || undefined,
@@ -726,7 +713,6 @@ const DealsDashboard = () => {
             .filter((deal) => doesDealMatchFrontendFilters({
               deal,
               selectedMunis,
-              minScore,
               distressedOnly,
               bankOwnedOnly,
               sheriffSaleOnly,
@@ -751,7 +737,6 @@ const DealsDashboard = () => {
       const payload = {
         name: name.trim(),
         munis: selectedMunis.length ? selectedMunis.join(",") : undefined,
-        min_score: minScore || 0,
         min_year_built: minYearBuilt ? Number(minYearBuilt) : undefined,
         max_year_built: maxYearBuilt ? Number(maxYearBuilt) : undefined,
         distressed_only: showDistressedOnly,
@@ -848,12 +833,6 @@ const DealsDashboard = () => {
           <option value="owner">Owner</option>
         </select>
         <button onClick={() => searchDeals(search)}>Search</button>
-        <input
-          type="number"
-          placeholder="Min Score"
-          value={minScore}
-          onChange={(e) => setMinScore(Number(e.target.value))}
-        />
       </div>
 
       <fieldset

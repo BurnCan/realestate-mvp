@@ -71,7 +71,6 @@ CREATE TABLE properties (
     notecd1 TEXT,
     shape_st_area NUMERIC,
     shape_st_length NUMERIC,
-    deal_score NUMERIC,
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
