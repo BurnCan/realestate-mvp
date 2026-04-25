@@ -7,6 +7,7 @@ import unicodedata
 from functools import lru_cache
 from itertools import islice
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -843,7 +844,17 @@ def _resolve_campaign_identifier(cur, identifier: str) -> int | None:
 
 def _normalize_redirect_url(value: str | None) -> str | None:
     normalized = (value or "").strip()
-    return normalized or None
+    if not normalized:
+        return None
+
+    parsed = urlparse(normalized)
+    if parsed.scheme or normalized.startswith("/"):
+        return normalized
+
+    if normalized.startswith("//"):
+        return f"https:{normalized}"
+
+    return f"https://{normalized}"
 
 
 @app.post("/campaigns")
