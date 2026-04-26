@@ -189,23 +189,18 @@ const matchesStatusFilters = ({
   recentDivorceOnly,
   ownershipChangeDateOnly,
 }) => {
-  const selectedFilters = [
-    distressedOnly && isDistressedProperty(deal),
-    bankOwnedOnly && isBankOwnedProperty(deal),
-    sheriffSaleOnly && isSheriffSaleProperty(deal),
-    ownerOccupantOnly && isOwnerOccupantProperty(deal),
-    recentDivorceOnly && Boolean(deal.recent_divorce),
-    ownershipChangeDateOnly && Boolean(String(deal.ownership_change_date || "").trim()),
-  ];
+  const activeFilters = [];
+  if (distressedOnly) activeFilters.push(isDistressedProperty(deal));
+  if (bankOwnedOnly) activeFilters.push(isBankOwnedProperty(deal));
+  if (sheriffSaleOnly) activeFilters.push(isSheriffSaleProperty(deal));
+  if (ownerOccupantOnly) activeFilters.push(isOwnerOccupantProperty(deal));
+  if (recentDivorceOnly) activeFilters.push(Boolean(deal.recent_divorce));
+  if (ownershipChangeDateOnly) {
+    activeFilters.push(Boolean(String(deal.ownership_change_date || "").trim()));
+  }
 
-  const anyFilterSelected =
-    distressedOnly
-    || bankOwnedOnly
-    || sheriffSaleOnly
-    || ownerOccupantOnly
-    || recentDivorceOnly
-    || ownershipChangeDateOnly;
-  return anyFilterSelected ? selectedFilters.some(Boolean) : true;
+  if (!activeFilters.length) return true;
+  return activeFilters.every(Boolean);
 };
 
 const matchesYearBuiltRange = ({ deal, minYearBuilt, maxYearBuilt }) => {
@@ -768,6 +763,7 @@ const DealsDashboard = () => {
               sheriffSaleOnly,
               ownerOccupantOnly,
               recentDivorceOnly,
+              ownershipChangeDateOnly,
               parsedMinYearBuilt,
               parsedMaxYearBuilt,
             }))
