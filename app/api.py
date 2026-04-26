@@ -374,7 +374,10 @@ def _build_filtered_deals_query(
         )
 
     if status_conditions:
-        base_query += " AND (" + " OR ".join(status_conditions) + ")"
+        # Combine enabled status filters with AND so multi-filter requests return
+        # only properties matching every selected filter. This keeps API behavior
+        # aligned with frontend filtering semantics.
+        base_query += " AND (" + " AND ".join(status_conditions) + ")"
     elif sheriff_sale_only:
         base_query += " AND 1 = 0"
 
