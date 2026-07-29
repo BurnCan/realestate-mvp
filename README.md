@@ -12,10 +12,13 @@
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.api:app --reload
+uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The backend listens on port `8000` by default. For internet access, use `http://64.121.154.166:8000`.
+The local API URL is `http://127.0.0.1:8000`. For example, the deals endpoint is
+`http://127.0.0.1:8000/deals`. From another device, replace `127.0.0.1` with the
+server's LAN IP, hostname, or properly configured public address. Opening port
+`8000` directly shows API JSON, not the frontend.
 
 ### 2) Frontend setup and start
 
@@ -24,24 +27,37 @@ In a separate terminal:
 ```bash
 cd frontend
 npm install
-npm run dev
+VITE_API_PROXY_TARGET=http://127.0.0.1:8000 npm run dev -- --host 0.0.0.0
 ```
 
-The frontend starts at `http://127.0.0.1:5173` by default and proxies `/api` requests to `http://64.121.154.166:8000`.
+The local dashboard URL is `http://127.0.0.1:5173`. From another device, open
+`http://<server-ip>:5173`.
 
-If you need to change the API host later, set:
+Vite receives requests such as `/api/deals`, strips the `/api` prefix, and proxies
+them to `http://127.0.0.1:8000/deals`. `VITE_API_PROXY_TARGET` is the backend
+origin only and must not include `/api`. Use a different target only when the
+backend runs on another host, for example:
 
 ```bash
-VITE_API_PROXY_TARGET=http://<new-ip-or-host>:8000 npm run dev
+VITE_API_PROXY_TARGET=http://<different-backend-host>:8000 npm run dev -- --host 0.0.0.0
 ```
 
-## Run
+### 3) Verify the API and frontend proxy
 
-Backend:
-`uvicorn app.api:app --reload`
+With both services running, use:
 
-Frontend:
-`npm run dev` (from `frontend/`)
+```bash
+curl -i http://127.0.0.1:8000/deals
+curl -i http://127.0.0.1:5173/api/deals
+```
+
+Both commands should return `HTTP 200` when the services and proxy are working.
+
+### External access
+
+Binding the services to `0.0.0.0` makes them listen on the machine's network
+interfaces, but does not by itself guarantee internet access. The machine firewall
+and router/NAT may also need TCP ports `5173` and `8000` opened or forwarded.
 
 ## Prototype scrapers
 
