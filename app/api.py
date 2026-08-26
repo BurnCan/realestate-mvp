@@ -1,9 +1,11 @@
 import csv
+import io
 import json
 import logging
 import re
 import secrets
 import unicodedata
+from datetime import date
 from functools import lru_cache
 from itertools import islice
 from pathlib import Path
@@ -12,7 +14,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from psycopg2 import OperationalError
 
@@ -22,6 +24,7 @@ from .db import (
     ensure_properties_schema,
     get_conn,
 )
+from .vistaprint import VISTAPRINT_HEADERS, build_vistaprint_rows
 
 app = FastAPI()
 logger = logging.getLogger(__name__)
@@ -880,6 +883,19 @@ def _fetch_campaign_unique_mailing_rows(cur, campaign_id: int) -> list[dict]:
     ]
 
 
+def _fetch_campaign_snapshots(cur, campaign_id: int) -> list[dict]:
+    cur.execute(
+        """
+        SELECT snapshot_data
+        FROM campaign_properties
+        WHERE campaign_id = %s
+        ORDER BY id ASC
+        """,
+        [campaign_id],
+    )
+    return [row[0] for row in (cur.fetchall() or []) if isinstance(row[0], dict)]
+
+
 def _fetch_property_deals_by_parcel_ids(cur, parcel_ids: list[str]) -> list[dict]:
     if not parcel_ids:
         return []
@@ -1131,6 +1147,9 @@ def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
     )
     total = cur.fetchone()[0]
     unique_mailing_addresses_count = _count_unique_campaign_mailing_addresses(cur, campaign_id)
+    vistaprint_ready, vistaprint_review = build_vistaprint_rows(
+        _fetch_campaign_snapshots(cur, campaign_id)
+    )
     deals = _fetch_campaign_deals(cur, campaign_id, limit=limit, offset=offset)
 
     cur.close()
@@ -1146,6 +1165,10 @@ def get_campaign(campaign_identifier: str, page: int = 1, limit: int = 250):
         "filters_snapshot": campaign[7] or {},
         "visitors": campaign[8],
         "unique_mailing_addresses_count": unique_mailing_addresses_count,
+        "vistaprint_validation": {
+            "ready_count": len(vistaprint_ready),
+            "review_count": len(vistaprint_review),
+        },
         "deals": deals,
         "pagination": {
             "page": page,
@@ -1174,6 +1197,57 @@ def get_campaign_mailing_addresses(campaign_identifier: str):
         "count": len(mailing_rows),
         "rows": mailing_rows,
     }
+
+
+@app.get("/campaigns/{campaign_identifier}/exports/vistaprint/validation")
+def get_campaign_vistaprint_validation(campaign_identifier: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
+    if campaign_id is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    ready, review = build_vistaprint_rows(_fetch_campaign_snapshots(cur, campaign_id))
+    cur.close()
+    conn.close()
+    return {"ready_count": len(ready), "review_count": len(review), "review": review}
+
+
+@app.get("/campaigns/{campaign_identifier}/exports/vistaprint.csv")
+def export_campaign_vistaprint_csv(campaign_identifier: str):
+    """Export the complete snapshot (never the paginated campaign detail rows)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    ensure_campaign_schema(conn)
+    campaign_id = _resolve_campaign_identifier(cur, campaign_identifier)
+    if campaign_id is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    cur.execute("SELECT COALESCE(slug, id::text) FROM campaigns WHERE id = %s", [campaign_id])
+    campaign_slug = cur.fetchone()[0]
+    ready, review = build_vistaprint_rows(_fetch_campaign_snapshots(cur, campaign_id))
+    cur.close()
+    conn.close()
+
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=VISTAPRINT_HEADERS, lineterminator="\r\n")
+    writer.writeheader()
+    writer.writerows(ready)
+    filename_slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(campaign_slug)).strip("-") or str(campaign_id)
+    export_date = date.today().isoformat()
+    return Response(
+        content=output.getvalue().encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="campaign-{filename_slug}-vistaprint-{export_date}.csv"',
+            "X-VistaPrint-Ready-Count": str(len(ready)),
+            "X-VistaPrint-Review-Count": str(len(review)),
+            "Access-Control-Expose-Headers": "Content-Disposition, X-VistaPrint-Ready-Count, X-VistaPrint-Review-Count",
+        },
+    )
 
 
 @app.delete("/campaigns/{campaign_identifier}")

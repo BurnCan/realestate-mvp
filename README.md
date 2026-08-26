@@ -112,3 +112,25 @@ python scripts/northampton_divorce_scraper.py
 
 - `GET /divorce-cases`
   - Returns paginated divorce case rows for the frontend dashboard.
+
+## Campaign mailing-list CSV exports
+
+The campaign detail dashboard provides two separate exports after a campaign is
+created. **Export Owner + Mailing CSV** preserves the original, single multiline
+`Owner + Mailing Address` format. **Export VistaPrint CSV** downloads the full
+campaign snapshot as structured rows for VistaPrint Postcard Mailing Services;
+neither export is limited by the currently displayed campaign page.
+
+The VistaPrint CSV headers intentionally reproduce VistaPrint's official
+**Mailing List Template**, verified on August 26, 2026, in this exact order:
+`First Name`, `Last Name`, `Company`, `Address 1`, `Address 2`, `City`, `State`,
+`Zip Code`. VistaPrint validates these labels, so do not rename or reorder them
+without checking the current official template again.
+
+The backend uses the original campaign snapshot name and mailing-address fields,
+deduplicates equivalent physical destinations (including ZIP+4 variants), and
+exports five-digit ZIP codes. The campaign detail controls report how many
+addresses are ready and how many need review. Missing addresses, locality lines
+without a safely recognizable city/two-letter-state/ZIP combination, and more
+than two street/address lines are reported for review rather than guessed; valid
+rows remain downloadable.
