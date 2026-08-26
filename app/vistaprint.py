@@ -1,9 +1,13 @@
 """VistaPrint Postcard Mailing Services CSV construction.
 
-The header spelling and order below mirror VistaPrint's official Mailing List
-Template (verified 2026-08-26).  VistaPrint validates uploaded CSVs by these
-labels, so this is deliberately a tuple and must not be casually renamed or
-reordered.
+The header spelling and order below mirror the ``Mailing List Template`` linked
+from VistaPrint's official Postcard Mailing Services page (verified
+2026-08-26):
+https://www.vistaprint.com/marketing-materials/postcard-mailing-services
+
+The vendor template itself is intentionally not stored here. VistaPrint
+validates uploaded CSVs by these labels, so re-check the current official
+template before changing either spelling or order.
 """
 
 from __future__ import annotations
@@ -65,11 +69,31 @@ def is_likely_organization(value: object) -> bool:
     return bool(name and _ENTITY_WORDS.search(name))
 
 
+def _ambiguous_recipient_reason(value: str) -> str:
+    """Flag names for which the county field does not establish name order.
+
+    ``OWNERS_NAME_1`` is copied verbatim from Northampton County's Land Records
+    ArcGIS service (see ``app.ingest.URL``). The service exposes no data
+    dictionary documenting a universal name order. In observed assessor-style
+    records, individual names are normalized in uppercase as ``LAST FIRST
+    [MIDDLE...]``; mixed-case text such as ``John Smith`` is therefore not
+    silently treated as that source convention. A comma makes the order
+    explicit regardless of case.
+    """
+    first_owner = re.split(r"\s*&\s*", value, maxsplit=1)[0]
+    first_owner = re.sub(r"\s+ET\s+AL\.?\s*$", "", first_owner, flags=re.IGNORECASE)
+    if "," in first_owner or first_owner == first_owner.upper():
+        return ""
+    return "Ambiguous recipient name order"
+
+
 def extract_recipient(snapshot: dict | None) -> dict[str, str]:
-    """Map assessor-style ``LAST FIRST ...`` names without inventing data.
+    """Map normalized assessor-style ``LAST FIRST ...`` names.
 
     Entity names remain intact in Company. For joint owners and ET AL records,
-    the explicitly named first owner is used as the recipient.
+    the explicitly named first owner is used as the recipient. This is narrowly
+    a Northampton County source-data convention, not a generic person-name
+    parser; callers must check ambiguous mixed-case names before exporting.
     """
     snapshot = snapshot if isinstance(snapshot, dict) else {}
     raw = clean_text(
@@ -155,9 +179,19 @@ def normalize_mailing_destination(snapshot: dict | None) -> str:
 
 
 def make_vistaprint_row(snapshot: dict | None) -> tuple[dict[str, str] | None, str]:
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
     address = derive_mailing_address(snapshot)
     if not address.exportable:
         return None, address.review_reason
+    raw_name = clean_text(
+        snapshot.get("owners_name_1")
+        or snapshot.get("owners_name_2")
+        or snapshot.get("owners_hidename")
+    )
+    if raw_name and not is_likely_organization(raw_name):
+        recipient_reason = _ambiguous_recipient_reason(raw_name)
+        if recipient_reason:
+            return None, recipient_reason
     row = {
         **extract_recipient(snapshot),
         "Address 1": address.address_1,

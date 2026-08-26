@@ -121,11 +121,13 @@ created. **Export Owner + Mailing CSV** preserves the original, single multiline
 campaign snapshot as structured rows for VistaPrint Postcard Mailing Services;
 neither export is limited by the currently displayed campaign page.
 
-The VistaPrint CSV headers intentionally reproduce VistaPrint's official
-**Mailing List Template**, verified on August 26, 2026, in this exact order:
+The VistaPrint CSV headers intentionally reproduce the **Mailing List Template**
+linked from VistaPrint's official [Postcard Mailing Services page](https://www.vistaprint.com/marketing-materials/postcard-mailing-services),
+verified on August 26, 2026, in this exact order:
 `First Name`, `Last Name`, `Company`, `Address 1`, `Address 2`, `City`, `State`,
 `Zip Code`. VistaPrint validates these labels, so do not rename or reorder them
-without checking the current official template again.
+without re-verifying both spelling and ordering against the current official
+template. The copyrighted vendor template is not stored in this repository.
 
 The backend uses the original campaign snapshot name and mailing-address fields,
 deduplicates equivalent physical destinations (including ZIP+4 variants), and
@@ -134,3 +136,12 @@ addresses are ready and how many need review. Missing addresses, locality lines
 without a safely recognizable city/two-letter-state/ZIP combination, and more
 than two street/address lines are reported for review rather than guessed; valid
 rows remain downloadable.
+
+`OWNERS_NAME_1` is ingested verbatim from Northampton County's Land Records
+ArcGIS service. That service does not publish a universal name-order guarantee;
+the uppercase individual records observed in this assessor data use `LAST FIRST
+[MIDDLE...]`. The VistaPrint conversion applies that source-specific convention
+only to normalized uppercase values (or names whose comma makes their order
+explicit). Ambiguous mixed-case values such as `John Smith` are counted for
+review rather than silently reversed. This is not intended to be a generic name
+parser.
