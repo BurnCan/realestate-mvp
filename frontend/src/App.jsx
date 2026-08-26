@@ -337,6 +337,18 @@ const downloadOwnerMailingCsvRows = (rows, filenamePrefix = "owners-mailing-addr
   URL.revokeObjectURL(url);
 };
 
+const downloadCsvBlob = (data, filename) => {
+  const url = URL.createObjectURL(new Blob([data], { type: "text/csv;charset=utf-8;" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
 const DealsTable = ({ deals }) => (
   <table width="100%" border="1" cellPadding="8">
     <thead>
@@ -1192,6 +1204,7 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [exportingSnapshot, setExportingSnapshot] = useState(false);
+  const [exportingVistaPrint, setExportingVistaPrint] = useState(false);
   const [redirectUrlInput, setRedirectUrlInput] = useState("");
   const [savingRedirectUrl, setSavingRedirectUrl] = useState(false);
 
@@ -1256,6 +1269,25 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
       setError("Could not export campaign snapshot CSV. Make sure the API server is running.");
     } finally {
       setExportingSnapshot(false);
+    }
+  };
+
+  const exportCampaignVistaPrintCsv = async () => {
+    if (!campaignIdentifier) return;
+    setExportingVistaPrint(true);
+    setError("");
+    try {
+      const response = await axios.get(
+        `${API}/campaigns/${campaignIdentifier}/exports/vistaprint.csv`,
+        { responseType: "blob" },
+      );
+      const campaignSlugOrId = campaign?.slug || campaign?.id || campaignIdentifier;
+      const now = new Date().toISOString().slice(0, 10);
+      downloadCsvBlob(response.data, `campaign-${campaignSlugOrId}-vistaprint-${now}.csv`);
+    } catch {
+      setError("Could not export VistaPrint CSV. Make sure the API server is running.");
+    } finally {
+      setExportingVistaPrint(false);
     }
   };
 
@@ -1341,6 +1373,21 @@ const CampaignDetailDashboard = ({ campaignIdentifier }) => {
               >
                 {exportingSnapshot ? "Exporting CSV..." : "Export Owner + Mailing CSV"}
               </button>
+              <button
+                style={{ marginLeft: 8 }}
+                onClick={exportCampaignVistaPrintCsv}
+                disabled={loading || exportingVistaPrint}
+              >
+                {exportingVistaPrint ? "Exporting VistaPrint CSV..." : "Export VistaPrint CSV"}
+              </button>
+              {campaign.vistaprint_validation && (
+                <span style={{ marginLeft: 10 }}>
+                  {campaign.vistaprint_validation.ready_count.toLocaleString()} addresses ready ·{" "}
+                  <strong style={{ color: campaign.vistaprint_validation.review_count ? "#9a6700" : "inherit" }}>
+                    {campaign.vistaprint_validation.review_count.toLocaleString()} need review
+                  </strong>
+                </span>
+              )}
               <button
                 style={{ marginLeft: 8 }}
                 onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
