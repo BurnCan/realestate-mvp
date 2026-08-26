@@ -29,10 +29,23 @@ class VistaPrintHelpersTest(unittest.TestCase):
         )
 
     def test_individual_middle_name_and_suffix(self):
+        # Representative values use the uppercase LAST FIRST convention emitted
+        # by the Northampton County assessor source.
         self.assertEqual(extract_recipient(snapshot()), {
             "First Name": "JOHN Q", "Last Name": "DOE", "Company": ""
         })
         self.assertEqual(extract_recipient(snapshot("DOE JOHN A JR"))["Last Name"], "DOE JR")
+
+    def test_ambiguous_mixed_case_name_is_sent_to_review_not_reversed(self):
+        row, reason = make_vistaprint_row(snapshot("John Smith"))
+        self.assertIsNone(row)
+        self.assertEqual(reason, "Ambiguous recipient name order")
+
+    def test_explicit_comma_name_order_is_not_ambiguous(self):
+        row, reason = make_vistaprint_row(snapshot("Smith, John Q"))
+        self.assertFalse(reason)
+        self.assertEqual(row["First Name"], "John Q")
+        self.assertEqual(row["Last Name"], "Smith")
 
     def test_organization_two_owner_and_et_al(self):
         self.assertEqual(extract_recipient(snapshot("ACME, LLC"))["Company"], "ACME, LLC")
