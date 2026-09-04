@@ -46,6 +46,7 @@ def inspect_full():
             "TOTAL_ASSESSED_VALUE": attributes.get("TOTAL_ASSESSED_VALUE"),
             "SALE_PRICE": attributes.get("SALE_PRICE"),
             "YEAR_BUILT": attributes.get("YEAR_BUILT"),
+            "OWNERS_HIDENAME": attributes.get("OWNERS_HIDENAME"),
         },
 
         # 🔥 geometry classification
@@ -58,7 +59,9 @@ def inspect_full():
         # 🔥 dataset insights
         "has_assessment_data": "TOTAL_ASSESSED_VALUE" in attributes,
         "has_sale_data": "SALE_PRICE" in attributes,
-        "has_owner_data": "OWNERS_NAME_1" in attributes,
+        "has_owner_data": (
+            "OWNERS_NAME_1" in attributes or "OWNERS_HIDENAME" in attributes
+        ),
         "has_address_data": "LOCATION" in attributes,
 
         # 🔥 raw multi-sample (important for schema variance)
