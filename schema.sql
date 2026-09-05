@@ -13,6 +13,9 @@ CREATE TABLE properties (
     recent_divorce BOOLEAN DEFAULT FALSE,
     divorce_case_status TEXT,
     divorce_date_opened DATE,
+    recent_probate BOOLEAN DEFAULT FALSE,
+    probate_filing_date DATE,
+    probate_decedent_name TEXT,
     mail_address_1 TEXT,
     mail_address_2 TEXT,
     mail_address_3 TEXT,
@@ -83,3 +86,17 @@ CREATE TABLE divorce_cases (
     status TEXT,
     updated_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE probate_estates (
+    id SERIAL PRIMARY KEY,
+    record_identifier TEXT UNIQUE,
+    estate_name TEXT NOT NULL,
+    normalized_estate_name TEXT,
+    death_date DATE,
+    filing_date DATE NOT NULL,
+    detail_url TEXT,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_probate_estates_filing_date ON probate_estates (filing_date DESC);
+CREATE INDEX idx_probate_estates_normalized_name ON probate_estates (normalized_estate_name);

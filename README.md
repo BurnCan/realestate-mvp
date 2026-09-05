@@ -113,6 +113,43 @@ python scripts/northampton_divorce_scraper.py
 - `GET /divorce-cases`
   - Returns paginated divorce case rows for the frontend dashboard.
 
+## Northampton probate scraper
+
+### `scripts/northampton_probate_scraper.py`
+
+Install Playwright's Chromium browser once after installing the Python requirements:
+
+```bash
+playwright install chromium
+```
+
+Run the scraper headlessly, or use the debug options to watch and slow the required
+Guest Login → terms → Accept → Search Public Records → estate/probate search flow:
+
+```bash
+python scripts/northampton_probate_scraper.py
+python scripts/northampton_probate_scraper.py --headed --slow-mo 250
+```
+
+The date window uses today's date and the same calendar date in the previous year
+(February 29 maps to February 28). The name input remains empty. Every results
+page is read, and records are upserted by the portal's record number or detail URL
+into `probate_estates`. Once the transaction is committed, a separate synchronization
+step matches normalized decedent names to property owners. It can be rerun without
+scraping with:
+
+```bash
+python scripts/northampton_probate_scraper.py --sync-only
+```
+
+The portal could not be reached from the development container on September 5,
+2026 because its outbound proxy rejected the connection with HTTP 403. Consequently,
+no difference from the requested workflow was observed or assumed. The scraper uses
+the specified accessible labels and table headings rather than speculative CSS
+selectors; if the live structure differs, it stops with `PortalStructureError` and
+writes `workflow-failure.html` and `workflow-failure.png` under
+`artifacts/northampton-probate/` for inspection.
+
 ## Campaign mailing-list CSV exports
 
 The campaign detail dashboard provides two separate exports after a campaign is

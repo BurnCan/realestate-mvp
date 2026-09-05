@@ -26,6 +26,9 @@ REQUIRED_PROPERTY_COLUMNS = {
     "recent_divorce": "BOOLEAN DEFAULT FALSE",
     "divorce_case_status": "TEXT",
     "divorce_date_opened": "DATE",
+    "recent_probate": "BOOLEAN DEFAULT FALSE",
+    "probate_filing_date": "DATE",
+    "probate_decedent_name": "TEXT",
     "mail_address_1": "TEXT",
     "mail_address_2": "TEXT",
     "mail_address_3": "TEXT",
@@ -95,6 +98,16 @@ REQUIRED_DIVORCE_COLUMNS = {
     "case_category": "TEXT",
     "date_opened": "DATE",
     "status": "TEXT",
+    "updated_at": "TIMESTAMP DEFAULT NOW()",
+}
+
+REQUIRED_PROBATE_COLUMNS = {
+    "record_identifier": "TEXT UNIQUE",
+    "estate_name": "TEXT NOT NULL",
+    "normalized_estate_name": "TEXT",
+    "death_date": "DATE",
+    "filing_date": "DATE NOT NULL",
+    "detail_url": "TEXT",
     "updated_at": "TIMESTAMP DEFAULT NOW()",
 }
 
@@ -171,6 +184,83 @@ def ensure_divorce_schema(conn):
         """
     )
 
+    conn.commit()
+    cur.close()
+
+
+def ensure_probate_schema(conn):
+    """Create the probate estate store used by the Recorder of Wills scraper."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS probate_estates (
+            id SERIAL PRIMARY KEY,
+            record_identifier TEXT UNIQUE,
+            estate_name TEXT NOT NULL,
+            filing_date DATE NOT NULL,
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    for column, column_type in REQUIRED_PROBATE_COLUMNS.items():
+        cur.execute(
+            f"ALTER TABLE probate_estates ADD COLUMN IF NOT EXISTS {column} {column_type}"
+        )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_probate_estates_filing_date "
+        "ON probate_estates (filing_date DESC)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS idx_probate_estates_normalized_name "
+        "ON probate_estates (normalized_estate_name)"
+    )
+    conn.commit()
+    cur.close()
+
+
+def sync_property_probate_fields(conn):
+    """Match estate names to owners and materialize the newest probate filing."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE properties
+        SET recent_probate = FALSE,
+            probate_filing_date = NULL,
+            probate_decedent_name = NULL,
+            updated_at = NOW()
+        WHERE recent_probate IS TRUE
+           OR probate_filing_date IS NOT NULL
+           OR probate_decedent_name IS NOT NULL
+        """
+    )
+    cur.execute(
+        """
+        WITH owner_names AS (
+            SELECT p.id,
+                   REGEXP_REPLACE(LOWER(COALESCE(owner_name, '')), '[^a-z0-9]+', ' ', 'g') AS owner_name
+            FROM properties p
+            CROSS JOIN LATERAL UNNEST(ARRAY[p.owners_name_1, p.owners_name_2]) owner_name
+        ),
+        matches AS (
+            SELECT o.id, pe.estate_name, pe.filing_date,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY o.id
+                       ORDER BY pe.filing_date DESC, pe.record_identifier DESC
+                   ) AS rank
+            FROM owner_names o
+            JOIN probate_estates pe
+              ON TRIM(o.owner_name) = pe.normalized_estate_name
+            WHERE pe.normalized_estate_name <> ''
+        )
+        UPDATE properties p
+        SET recent_probate = TRUE,
+            probate_filing_date = m.filing_date,
+            probate_decedent_name = m.estate_name,
+            updated_at = NOW()
+        FROM matches m
+        WHERE p.id = m.id AND m.rank = 1
+        """
+    )
     conn.commit()
     cur.close()
 
