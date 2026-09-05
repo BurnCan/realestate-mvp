@@ -464,7 +464,7 @@ const Navigation = ({ currentPath, navigate }) => (
       onClick={() => navigate("/divorces")}
       style={{ fontWeight: currentPath === "/divorces" ? "bold" : "normal" }}
     >
-      Divorce Cases
+      Divorce
     </button>
     <button
       onClick={() => navigate("/campaigns")}
@@ -475,7 +475,8 @@ const Navigation = ({ currentPath, navigate }) => (
   </div>
 );
 
-const DealsDashboard = () => {
+const DealsDashboard = ({ preset }) => {
+  const isDivorcePreset = preset === "divorce";
   const [deals, setDeals] = useState([]);
   const [selectedMunis, setSelectedMunis] = useState([]);
   const [search, setSearch] = useState("");
@@ -488,8 +489,8 @@ const DealsDashboard = () => {
   const [showDistressedOnly, setShowDistressedOnly] = useState(false);
   const [showBankOwnedOnly, setShowBankOwnedOnly] = useState(false);
   const [showSheriffSaleOnly, setShowSheriffSaleOnly] = useState(false);
-  const [showOwnerOccupantOnly, setShowOwnerOccupantOnly] = useState(false);
-  const [showRecentDivorceOnly, setShowRecentDivorceOnly] = useState(false);
+  const [showOwnerOccupantOnly, setShowOwnerOccupantOnly] = useState(isDivorcePreset);
+  const [showRecentDivorceOnly, setShowRecentDivorceOnly] = useState(isDivorcePreset);
   const [showOwnershipChangeDateOnly, setShowOwnershipChangeDateOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({
@@ -671,7 +672,10 @@ const DealsDashboard = () => {
   };
 
   useEffect(() => {
-    fetchDeals();
+    fetchDeals({
+      ownerOccupantOnly: isDivorcePreset,
+      recentDivorceOnly: isDivorcePreset,
+    });
   }, []);
 
   const applyFilters = () => {
@@ -873,7 +877,12 @@ const DealsDashboard = () => {
 
   return (
     <div style={{ padding: 20, fontFamily: "Arial" }}>
-      <h1>🏡 Real Estate Results Dashboard</h1>
+      <h1>
+        {isDivorcePreset ? "⚖️ Divorce Property Results" : "🏡 Real Estate Results Dashboard"}
+      </h1>
+      {isDivorcePreset && (
+        <p>This page starts filtered to recent-divorce, owner-occupied properties.</p>
+      )}
       <section style={dashboardPanelStyle}>
         <div style={{ display: "flex", gap: 10, marginBottom: 20, alignItems: "center" }}>
           <input
@@ -1429,7 +1438,7 @@ export default function App() {
   return (
     <>
       <Navigation currentPath={currentPath} navigate={navigate} />
-      {currentPath === "/divorces" && <DivorceDashboard />}
+      {currentPath === "/divorces" && <DealsDashboard preset="divorce" />}
       {currentPath === "/" && <DealsDashboard />}
       {currentPath === "/campaigns" && <CampaignsDashboard navigate={navigate} />}
       {currentPath.startsWith("/campaigns/") && (
